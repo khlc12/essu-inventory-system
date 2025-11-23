@@ -1,5 +1,5 @@
 {
-  "name": "ESSU Inventory System Prototype",
+  "name": "ESSU Inventory System",
   "description": "A functional prototype of the Property, Plant, and Equipment (PPE) inventory system with automated physical count calculations.",
   "requestFramePermissions": []
 }

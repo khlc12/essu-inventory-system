@@ -22,6 +22,7 @@ export type ViewState =
   | 'asset-registry'
   | 'asset-new'
   | 'asset-detail'
+  | 'asset-edit'
   | 'mr-list'
   | 'mr-new'
   | 'mr-detail';
@@ -57,39 +58,55 @@ export interface Department {
   id: string;
   code: string;
   name: string;
+  head?: string; // Department Head
+  locationId?: string; // Main Office Location
   status: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Employee {
   id: string;
   employeeId: string;
-  name: string;
-  position: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  position?: string;
   departmentId: string;
   status: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Location {
   id: string;
   code: string;
-  name: string; // e.g. Room 301
-  building: string;
+  name: string;
+  description?: string;
   status: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface FundCluster {
   id: string;
   code: string;
-  description: string; // e.g. Regular Agency Fund
+  name: string; // e.g. Regular Agency Fund
+  description?: string; // Internal notes
   status: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AssetCategory {
   id: string;
   code: string;
   name: string;
+  description?: string;
   type: 'PPE' | 'Consumable' | 'Semi-Expendable';
   status: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CatalogItem {
@@ -221,9 +238,53 @@ export interface AuditSession {
 export interface LogEntry {
   id: string;
   timestamp: string;
-  user: string;
+  userId: string;
+  username: string;
   role: string;
   action: string; // e.g. 'Created Asset', 'Issued MR'
   module: string; // e.g. 'Asset Registry', 'Reports'
-  details: string; // Reference ID or summary
+  referenceId: string; // e.g. Transaction No, Property No
+  description: string; // Details of the action
+}
+
+// --- System Settings Type ---
+
+export interface SystemSettings {
+  general: {
+    systemName: string;
+    departmentName: string;
+    footerText: string;
+    logoUrl: string;
+  };
+  inventory: {
+    defaultReorderThreshold: number;
+    enablePartialPhysicalCount: boolean;
+    defaultAssetStatus: string;
+  };
+  documents: {
+    includeLogoInPDF: boolean;
+    preparedBy: string;
+    receivedBy: string;
+    verifiedBy: string;
+  };
+  users: {
+    defaultRole: string;
+  };
+  notifications: {
+    enableLowStockAlerts: boolean;
+    enableInactivityWarning: boolean;
+    alertType: 'Toast' | 'Badge' | 'Modal';
+  };
+}
+
+// --- Notification Types ---
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  timestamp: string;
+  read: boolean;
+  link?: ViewState;
 }

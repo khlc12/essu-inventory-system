@@ -1,5 +1,5 @@
 
-import { InventoryItem, Department, Employee, Location, FundCluster, AssetCategory, CatalogItem, Transaction, Asset, MemorandumReceipt, AuditSession, LogEntry } from './types';
+import { InventoryItem, Department, Employee, Location, FundCluster, AssetCategory, CatalogItem, Transaction, Asset, MemorandumReceipt, AuditSession, LogEntry, SystemSettings, AppNotification } from './types';
 
 // --- Audit Data ---
 export const INITIAL_INVENTORY: InventoryItem[] = [
@@ -112,45 +112,48 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
 
 // --- Master Data Mocks ---
 
+export const INITIAL_LOCATIONS: Location[] = [
+  { id: '1', code: 'RM301', name: 'ComLab 1', description: 'IT Building 3rd Floor', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '2', code: 'RM302', name: 'ComLab 2', description: 'IT Building 3rd Floor', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '3', code: 'AVR', name: 'Audio Visual Room', description: 'Main Library G/F', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '4', code: 'FAC', name: 'Faculty Room', description: 'Admin Building 2nd Floor', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '5', code: 'COED-OFF', name: 'Dean Office', description: 'Educ Building', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '6', code: 'SUP-OFF', name: 'Supply Office Main', description: 'Admin Building G/F', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '7', code: 'ENG-LAB', name: 'Engineering Lab', description: 'Engineering Building', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+];
+
 export const INITIAL_DEPARTMENTS: Department[] = [
-  { id: '1', code: 'COED', name: 'College of Education', status: 'Active' },
-  { id: '2', code: 'CCS', name: 'College of Computer Studies', status: 'Active' },
-  { id: '3', code: 'CBMA', name: 'College of Business Mgt & Accountancy', status: 'Active' },
-  { id: '4', code: 'CAS', name: 'College of Arts and Sciences', status: 'Active' },
-  { id: '5', code: 'CON', name: 'College of Nursing', status: 'Active' },
-  { id: '6', code: 'ADMIN', name: 'Administrative Services', status: 'Active' },
-  { id: '7', code: 'SUPPLY', name: 'Supply Office', status: 'Active' },
+  { id: '1', code: 'COED', name: 'College of Education', head: 'Dr. Sharon Singzon', locationId: '5', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '2', code: 'CCS', name: 'College of Computer Studies', head: 'Prof. Rowena Capada', locationId: '1', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '3', code: 'CBMA', name: 'College of Business Mgt & Accountancy', locationId: '4', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '4', code: 'CAS', name: 'College of Arts and Sciences', locationId: '4', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '5', code: 'CON', name: 'College of Nursing', locationId: '4', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '6', code: 'ADMIN', name: 'Administrative Services', locationId: '4', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '7', code: 'SUPPLY', name: 'Supply Office', head: 'Jeffrey Meneses', locationId: '6', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '8', code: 'COE', name: 'College of Engineering', locationId: '7', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
 ];
 
 export const INITIAL_EMPLOYEES: Employee[] = [
-  { id: '1', employeeId: 'E001', name: 'Jeffrey Meneses', position: 'Admin Officer V', departmentId: 'ADMIN', status: 'Active' },
-  { id: '2', employeeId: 'E002', name: 'Arnel Balbin', position: 'Instructor I', departmentId: 'COED', status: 'Active' },
-  { id: '3', employeeId: 'E003', name: 'Sharon Singzon', position: 'Dean', departmentId: 'COED', status: 'Active' },
-  { id: '4', employeeId: 'E004', name: 'Rowena Capada', position: 'Assoc. Professor', departmentId: 'CCS', status: 'Active' },
-  { id: '5', employeeId: 'E005', name: 'Kenneth Rey Afable', position: 'IT Technician', departmentId: 'CCS', status: 'Active' },
-  { id: '6', employeeId: 'E006', name: 'Nasser Calapano', position: 'Instructor', departmentId: 'CAS', status: 'Active' },
-];
-
-export const INITIAL_LOCATIONS: Location[] = [
-  { id: '1', code: 'RM301', name: 'ComLab 1', building: 'IT Building', status: 'Active' },
-  { id: '2', code: 'RM302', name: 'ComLab 2', building: 'IT Building', status: 'Active' },
-  { id: '3', code: 'AVR', name: 'Audio Visual Room', building: 'Main Library', status: 'Active' },
-  { id: '4', code: 'FAC', name: 'Faculty Room', building: 'Admin Building', status: 'Active' },
-  { id: '5', code: 'COED-OFF', name: 'Dean Office', building: 'Educ Building', status: 'Active' },
+  { id: '1', employeeId: 'E001', firstName: 'Jeffrey', lastName: 'Meneses', middleName: '', position: 'Admin Officer V', departmentId: 'ADMIN', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '2', employeeId: 'E002', firstName: 'Arnel', lastName: 'Balbin', middleName: 'S', position: 'Instructor I', departmentId: 'COED', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '3', employeeId: 'E003', firstName: 'Sharon', lastName: 'Singzon', middleName: 'L', position: 'Dean', departmentId: 'COED', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '4', employeeId: 'E004', firstName: 'Rowena', lastName: 'Capada', middleName: '', position: 'Assoc. Professor', departmentId: 'CCS', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '5', employeeId: 'E005', firstName: 'Kenneth Rey', lastName: 'Afable', middleName: '', position: 'IT Technician', departmentId: 'CCS', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '6', employeeId: 'E006', firstName: 'Nasser', lastName: 'Calapano', middleName: '', position: 'Instructor', departmentId: 'CAS', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
 ];
 
 export const INITIAL_FUNDS: FundCluster[] = [
-  { id: '1', code: '101', description: 'Regular Agency Fund (RAF)', status: 'Active' },
-  { id: '2', code: '164', description: 'Special Trust Fund (STF)', status: 'Active' },
-  { id: '3', code: '184', description: 'Income Generating Projects (IGP)', status: 'Active' },
+  { id: '1', code: '101', name: 'Regular Agency Fund', description: 'General Fund', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '2', code: '164', name: 'Special Trust Fund', description: 'STF', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '3', code: '184', name: 'Income Generating Projects', description: 'IGP', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
 ];
 
 export const INITIAL_CATEGORIES: AssetCategory[] = [
-  { id: '1', code: '0605020', name: 'IT Equipment', type: 'PPE', status: 'Active' },
-  { id: '2', code: '0605030', name: 'Office Equipment', type: 'PPE', status: 'Active' },
-  { id: '3', code: '0605070', name: 'Furniture & Fixtures', type: 'PPE', status: 'Active' },
-  { id: '4', code: 'SUP-OFF', name: 'Office Supplies', type: 'Consumable', status: 'Active' },
-  { id: '5', code: 'SUP-IT', name: 'IT Supplies', type: 'Consumable', status: 'Active' },
+  { id: '1', code: '0605020', name: 'IT Equipment', description: 'Computers, Printers, Peripherals', type: 'PPE', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '2', code: '0605030', name: 'Office Equipment', description: 'Aircons, Copiers, Calculators', type: 'PPE', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '3', code: '0605070', name: 'Furniture & Fixtures', description: 'Chairs, Tables, Cabinets', type: 'PPE', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '4', code: 'SUP-OFF', name: 'Office Supplies', description: 'Paper, Pens, Staplers', type: 'Consumable', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '5', code: 'SUP-IT', name: 'IT Supplies', description: 'Ink, Toner, Flash Drives', type: 'Consumable', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
 ];
 
 export const INITIAL_CATALOG: CatalogItem[] = [
@@ -307,7 +310,7 @@ export const INITIAL_AUDITS: AuditSession[] = [
         shortageOverageValue: 0,
         status: 'Matched',
         locationName: 'Dean Office',
-        custodianName: 'Arnel Balbin'
+        custodianName: 'Balbin, Arnel S.'
       },
        {
         assetId: 'A2',
@@ -320,7 +323,7 @@ export const INITIAL_AUDITS: AuditSession[] = [
         shortageOverageValue: 0,
         status: 'Matched',
         locationName: 'Dean Office',
-        custodianName: 'Arnel Balbin'
+        custodianName: 'Balbin, Arnel S.'
       }
     ]
   }
@@ -331,28 +334,75 @@ export const INITIAL_LOGS: LogEntry[] = [
   {
     id: 'LOG-1',
     timestamp: '2024-01-15T08:01:00Z',
-    user: 'Jeffrey Meneses',
+    userId: 'E001',
+    username: 'Jeffrey Meneses',
     role: 'Admin Officer V',
     action: 'Created Transaction',
     module: 'Stock Transactions',
-    details: 'Created Stock In TXN-2024-001'
+    referenceId: 'TXN-2024-001',
+    description: 'Created Stock In TXN-2024-001'
   },
   {
     id: 'LOG-2',
     timestamp: '2024-01-20T10:31:00Z',
-    user: 'Jeffrey Meneses',
+    userId: 'E001',
+    username: 'Jeffrey Meneses',
     role: 'Admin Officer V',
     action: 'Created Transaction',
     module: 'Stock Transactions',
-    details: 'Created Stock Out TXN-2024-002'
+    referenceId: 'TXN-2024-002',
+    description: 'Created Stock Out TXN-2024-002'
   },
   {
     id: 'LOG-3',
     timestamp: '2023-12-20T17:00:00Z',
-    user: 'Jeffrey Meneses',
+    userId: 'E001',
+    username: 'Jeffrey Meneses',
     role: 'Admin Officer V',
     action: 'Finalized Session',
     module: 'Physical Count',
-    details: 'Finalized Audit Session PC-2023-COED'
+    referenceId: 'PC-2023-COED',
+    description: 'Finalized Audit Session PC-2023-COED'
+  }
+];
+
+// --- Initial System Settings ---
+export const INITIAL_SETTINGS: SystemSettings = {
+  general: {
+    systemName: 'ESSU Supply Office Inventory System',
+    departmentName: 'Supply Office',
+    footerText: 'Generated by ESSU Inventory System v1.0',
+    logoUrl: ''
+  },
+  inventory: {
+    defaultReorderThreshold: 10,
+    enablePartialPhysicalCount: true,
+    defaultAssetStatus: 'Active'
+  },
+  documents: {
+    includeLogoInPDF: true,
+    preparedBy: 'Jeffrey Meneses',
+    receivedBy: 'Juan Dela Cruz',
+    verifiedBy: 'Head of Agency'
+  },
+  users: {
+    defaultRole: 'Staff'
+  },
+  notifications: {
+    enableLowStockAlerts: true,
+    enableInactivityWarning: false,
+    alertType: 'Toast'
+  }
+};
+
+// --- Notifications ---
+export const INITIAL_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: 'n1',
+    title: 'Welcome!',
+    message: 'Welcome to the ESSU Inventory System.',
+    type: 'info',
+    timestamp: '2024-01-01T09:00:00Z',
+    read: false
   }
 ];

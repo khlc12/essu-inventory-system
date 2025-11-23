@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   INITIAL_INVENTORY, 
   INITIAL_DEPARTMENTS, 
@@ -12,7 +12,9 @@ import {
   INITIAL_ASSETS,
   INITIAL_MRS,
   INITIAL_AUDITS,
-  INITIAL_LOGS
+  INITIAL_LOGS,
+  INITIAL_SETTINGS,
+  INITIAL_NOTIFICATIONS
 } from './constants';
 import { 
   InventoryItem, 
@@ -35,7 +37,9 @@ import {
   AuditSession,
   AuditItem,
   AuditSessionStatus,
-  LogEntry
+  LogEntry,
+  SystemSettings,
+  AppNotification
 } from './types';
 import { 
   LayoutDashboard, 
@@ -87,7 +91,23 @@ import {
   Activity,
   ArrowUpDown,
   LogIn,
-  ShieldCheck
+  ShieldCheck,
+  Ban,
+  ToggleLeft,
+  ToggleRight,
+  LogOut,
+  Upload,
+  RefreshCw,
+  FileJson,
+  Check,
+  XCircle,
+  Loader2,
+  Eye,
+  EyeOff,
+  Lock,
+  User,
+  MoreVertical,
+  Layers
 } from 'lucide-react';
 
 // --- Utility Functions ---
@@ -99,6 +119,11 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
 const formatDateTime = (dateStr: string) => new Date(dateStr).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+const getEmployeeFullName = (e?: Employee) => {
+  if (!e) return 'Unknown';
+  return `${e.lastName}, ${e.firstName} ${e.middleName ? e.middleName[0] + '.' : ''}`.trim();
+};
 
 const exportToCSV = (data: any[], filename: string) => {
   if (!data.length) return;
@@ -125,28 +150,21 @@ const exportToCSV = (data: any[], filename: string) => {
   }
 };
 
-// --- Master Data Configuration Types ---
-type FieldType = 'text' | 'number' | 'select';
-
-interface FieldConfig {
-  name: string;
-  label: string;
-  type: FieldType;
-  options?: { label: string; value: string }[];
-  required?: boolean;
-}
-
-interface ModuleConfig {
-  title: string;
-  fields: FieldConfig[];
-  columns: { key: string; label: string; render?: (val: any) => React.ReactNode }[];
-}
-
 // --- Helper Components ---
+
+const ESSUHeader = () => (
+  <div className="hidden print:block text-center mb-8 font-serif">
+    <div className="text-xs font-bold tracking-wider">Republic of the Philippines</div>
+    <div className="text-sm font-bold text-[#006400] tracking-wide">EASTERN SAMAR STATE UNIVERSITY</div>
+    <div className="text-xs italic">Borongan City, Eastern Samar</div>
+    <div className="mt-4 pt-2 border-t border-black w-full max-w-md mx-auto"></div>
+    <div className="mt-1 font-bold text-lg uppercase tracking-widest">Supply Office</div>
+  </div>
+);
 
 const NavSection = ({ label, children, collapsed }: any) => (
   <div className="mb-4">
-    {!collapsed && <div className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{label}</div>}
+    {!collapsed && <div className="px-4 text-xs font-semibold text-green-200/60 uppercase tracking-wider mb-2">{label}</div>}
     <div className="space-y-1">{children}</div>
   </div>
 );
@@ -156,2602 +174,3540 @@ const NavItem = ({ icon, label, active, onClick, collapsed }: any) => (
     onClick={onClick}
     className={`w-full flex items-center gap-3 px-4 py-2 text-sm font-medium transition-colors rounded-lg mx-2 w-auto ${
       active 
-        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
-        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
+        ? 'bg-white/10 text-yellow-400 shadow-lg shadow-black/10 border border-white/5' 
+        : 'text-green-100/70 hover:text-white hover:bg-white/5'
     }`}
   >
-    <span className={`${active ? 'text-white' : 'text-slate-400'}`}>{icon}</span>
+    <span className={`${active ? 'text-yellow-400' : 'text-green-100/70 group-hover:text-white'}`}>{icon}</span>
     {!collapsed && <span>{label}</span>}
   </button>
 );
 
-const StatCard = ({ label, value, subtext, icon, colorClass }: any) => (
-  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-    <div className="flex justify-between items-start mb-4">
-      <div className={`p-3 rounded-lg ${colorClass} bg-opacity-10`}>
-         {React.cloneElement(icon, { className: `w-6 h-6 ${colorClass.replace('bg-', 'text-')}` })}
-      </div>
-      {subtext && <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full">{subtext}</span>}
+const StatCard = ({ label, value, subtext, icon, colorClass, iconColorClass }: any) => (
+  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+    <div className={`absolute top-0 right-0 p-4 opacity-10 transform translate-x-2 -translate-y-2 group-hover:scale-110 transition-transform ${iconColorClass}`}>
+       {React.cloneElement(icon, { size: 48 })}
     </div>
-    <div className="text-2xl font-bold text-slate-800 mb-1">{value}</div>
-    <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">{label}</div>
+    <div className="flex justify-between items-start mb-4 relative z-10">
+      <div className={`p-3 rounded-lg ${colorClass} bg-opacity-10`}>
+         {React.cloneElement(icon, { className: `w-6 h-6 ${iconColorClass || colorClass.replace('bg-', 'text-')}` })}
+      </div>
+      {subtext && <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full border border-slate-200">{subtext}</span>}
+    </div>
+    <div className="text-2xl font-bold text-slate-800 mb-1 relative z-10">{value}</div>
+    <div className="text-xs text-slate-500 font-medium uppercase tracking-wide relative z-10">{label}</div>
   </div>
 );
 
-// --- Custom Simple Bar Chart ---
-const StockMovementChart = ({ transactions }: { transactions: Transaction[] }) => {
-  const chartData = useMemo(() => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    return months.map(m => ({
-      month: m,
-      in: Math.floor(Math.random() * 50) + 10,
-      out: Math.floor(Math.random() * 40) + 5
-    }));
+// --- Custom Stock Movement Chart ---
+const StockMovementChart = ({ transactions, departments }: { transactions: Transaction[], departments: Department[] }) => {
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedDept, setSelectedDept] = useState('All');
+  const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
+
+  const availableYears = useMemo(() => {
+    const years = new Set(transactions.map(t => new Date(t.date).getFullYear()));
+    years.add(new Date().getFullYear());
+    return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
 
-  const maxVal = Math.max(...chartData.map(d => Math.max(d.in, d.out)));
-
-  return (
-    <div className="h-64 flex items-end justify-between gap-2 pt-8">
-      {chartData.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col justify-end items-center gap-2 group">
-          <div className="flex gap-1 w-full justify-center items-end h-full relative">
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-               In: {d.in} | Out: {d.out}
-            </div>
-            
-            <div 
-              className="w-3 md:w-6 bg-emerald-500 rounded-t-sm transition-all duration-500 hover:bg-emerald-400" 
-              style={{ height: `${(d.in / maxVal) * 100}%` }} 
-            />
-            <div 
-              className="w-3 md:w-6 bg-amber-500 rounded-t-sm transition-all duration-500 hover:bg-amber-400" 
-              style={{ height: `${(d.out / maxVal) * 100}%` }} 
-            />
-          </div>
-          <span className="text-xs text-slate-500 font-medium">{d.month}</span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// --- Landing Page Component ---
-const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 font-sans relative overflow-hidden">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-64 bg-[#006400] skew-y-[-5deg] origin-top-left transform -translate-y-20 z-0"></div>
-      
-      <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in duration-500">
-        {/* Header Section with ESSU Color */}
-        <div className="bg-[#006400] p-10 text-center text-white relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full bg-black opacity-10 z-0"></div>
-          <div className="relative z-10">
-            <div className="w-24 h-24 bg-white/10 rounded-full mx-auto mb-6 flex items-center justify-center backdrop-blur-sm border border-white/20 shadow-lg">
-              <span className="text-4xl font-bold tracking-tighter">ES</span>
-            </div>
-            <h1 className="text-2xl font-bold mb-2">ESSU Supply Office</h1>
-            <p className="text-green-100 text-xs font-medium tracking-widest uppercase opacity-90">Inventory Management System</p>
-          </div>
-        </div>
-        
-        {/* Content Section */}
-        <div className="p-8">
-          <div className="text-center mb-10">
-            <div className="flex justify-center mb-4 text-[#006400]">
-               <ShieldCheck className="w-10 h-10 opacity-80" strokeWidth={1.5} />
-            </div>
-            <p className="text-slate-600 text-sm leading-relaxed">
-              Digitizing inventory, assets, and audit workflows for Eastern Samar State University.
-            </p>
-          </div>
-
-          <button 
-            onClick={onLogin}
-            className="w-full bg-[#006400] hover:bg-green-900 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg shadow-green-900/20 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 flex items-center justify-center gap-3 group"
-          >
-            <span>Login to System</span>
-            <LogIn className="w-4 h-4 opacity-80 group-hover:translate-x-1 transition-transform" />
-          </button>
-          
-          <div className="mt-8 text-center border-t border-slate-100 pt-6">
-            <p className="text-xs text-slate-400 flex items-center justify-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Authorized Personnel Only
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="mt-12 text-center">
-         <p className="text-slate-400 text-xs font-medium">&copy; 2025 Eastern Samar State University</p>
-         <p className="text-slate-300 text-[10px] mt-1">Supply Office Inventory System v1.0</p>
-      </div>
-    </div>
-  );
-};
-
-// --- Dashboard View ---
-
-const DashboardView = ({ 
-  assets, 
-  transactions, 
-  mrs, 
-  audits, 
-  catalog, 
-  onNavigate 
-}: any) => {
-  
-  const metrics = useMemo(() => {
-    const activeAssets = assets.filter((a: Asset) => a.status === 'Active').length;
-    
-    const issuedAssetsCount = mrs
-      .filter((m: MemorandumReceipt) => m.status === 'Active')
-      .reduce((acc: number, m: MemorandumReceipt) => {
-         return acc + m.items.filter(i => !i.returnDate).length;
-      }, 0);
-      
-    const repairRetired = assets.filter((a: Asset) => ['Retired', 'Under Repair'].includes(a.status)).length;
-    
-    const lastAudit = audits.find((a: AuditSession) => a.status === 'Finalized');
-    const shortageValue = lastAudit 
-      ? lastAudit.items.reduce((acc: number, i: AuditItem) => i.status === 'Shortage' ? acc + Math.abs(i.shortageOverageValue) : acc, 0)
-      : 0;
-      
-    const lowStockItems = catalog.filter((c: CatalogItem) => 
-      c.itemType === 'Consumable' && c.quantity <= (c.reorderPoint || 10)
-    );
-
-    return {
-      activeAssets,
-      issuedAssetsCount,
-      repairRetired,
-      shortageValue,
-      lowStockItems,
-      openAudits: audits.filter((a: AuditSession) => a.status === 'Draft').length
-    };
-  }, [assets, mrs, audits, catalog]);
-
-  const activityFeed = useMemo(() => {
-    const feed = [
-       ...transactions.map((t: Transaction) => ({
-          id: t.id, type: 'Transaction', 
-          label: `${t.type} - ${t.transactionId}`, 
-          date: t.date, 
-          icon: t.type === 'Stock In' ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />,
-          color: t.type === 'Stock In' ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'
-       })),
-       ...audits.map((a: AuditSession) => ({
-          id: a.id, type: 'Audit',
-          label: `Audit Session: ${a.sessionId}`,
-          date: a.createdAt,
-          icon: <PackageSearch size={14} />,
-          color: 'text-purple-600 bg-purple-50'
-       })),
-       ...mrs.map((m: MemorandumReceipt) => ({
-          id: m.id, type: 'MR',
-          label: `MR Issued: ${m.mrNumber}`,
-          date: m.dateIssued,
-          icon: <ClipboardList size={14} />,
-          color: 'text-blue-600 bg-blue-50'
-       }))
-    ];
-    return feed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
-  }, [transactions, audits, mrs]);
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard 
-            label="Registered PPE Assets" 
-            value={metrics.activeAssets} 
-            subtext="Active in Registry"
-            icon={<Monitor />} 
-            colorClass="bg-blue-500"
-          />
-          <StatCard 
-            label="Issued Assets" 
-            value={metrics.issuedAssetsCount} 
-            subtext="Assigned to Employees"
-            icon={<UserCircle />} 
-            colorClass="bg-emerald-500"
-          />
-          <StatCard 
-            label="Repair / Retired" 
-            value={metrics.repairRetired} 
-            subtext="Non-Functional"
-            icon={<Archive />} 
-            colorClass="bg-slate-500"
-          />
-          <StatCard 
-            label="Shortage Value" 
-            value={formatCurrency(metrics.shortageValue)} 
-            subtext={metrics.openAudits > 0 ? `${metrics.openAudits} Audit In-Progress` : "Last Finalized Audit"}
-            icon={<AlertTriangle />} 
-            colorClass="bg-red-500"
-          />
-       </div>
-
-       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-             <div className="flex justify-between items-center mb-4">
-                <div>
-                   <h3 className="font-bold text-slate-800">Stock Movement</h3>
-                   <p className="text-sm text-slate-500">In vs Out transactions over last 6 months</p>
-                </div>
-                <div className="flex gap-3 text-xs font-medium">
-                   <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-emerald-500"></div> Stock In</div>
-                   <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-amber-500"></div> Stock Out</div>
-                </div>
-             </div>
-             <StockMovementChart transactions={transactions} />
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-             <h3 className="font-bold text-slate-800 mb-4">Quick Actions</h3>
-             <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => onNavigate('transactions-new')} className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 border border-slate-100 rounded-xl transition-all group">
-                   <div className="p-2 bg-white rounded-full shadow-sm mb-2 group-hover:scale-110 transition-transform text-emerald-600"><ArrowDownLeft size={20} /></div>
-                   <span className="text-xs font-semibold text-slate-600">Stock In</span>
-                </button>
-                <button onClick={() => onNavigate('transactions-new')} className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-amber-50 hover:border-amber-200 border border-slate-100 rounded-xl transition-all group">
-                   <div className="p-2 bg-white rounded-full shadow-sm mb-2 group-hover:scale-110 transition-transform text-amber-600"><ArrowUpRight size={20} /></div>
-                   <span className="text-xs font-semibold text-slate-600">Stock Out</span>
-                </button>
-                <button onClick={() => onNavigate('asset-new')} className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 border border-slate-100 rounded-xl transition-all group">
-                   <div className="p-2 bg-white rounded-full shadow-sm mb-2 group-hover:scale-110 transition-transform text-indigo-600"><Tags size={20} /></div>
-                   <span className="text-xs font-semibold text-slate-600">Register Asset</span>
-                </button>
-                <button onClick={() => onNavigate('mr-new')} className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-purple-50 hover:border-purple-200 border border-slate-100 rounded-xl transition-all group">
-                   <div className="p-2 bg-white rounded-full shadow-sm mb-2 group-hover:scale-110 transition-transform text-purple-600"><ClipboardList size={20} /></div>
-                   <span className="text-xs font-semibold text-slate-600">Issue MR</span>
-                </button>
-             </div>
-          </div>
-       </div>
-
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                   <AlertCircle className="text-red-500" size={18} /> Low Stock Alerts
-                </h3>
-                <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded-full">{metrics.lowStockItems.length} items</span>
-             </div>
-             <div className="flex-1 overflow-y-auto max-h-64 p-0">
-                {metrics.lowStockItems.length > 0 ? (
-                  <table className="w-full text-sm text-left">
-                     <tbody className="divide-y divide-slate-50">
-                        {metrics.lowStockItems.slice(0, 5).map((item: CatalogItem) => (
-                           <tr key={item.id} className="hover:bg-slate-50">
-                              <td className="px-6 py-3 font-medium text-slate-700">{item.article}</td>
-                              <td className="px-6 py-3 text-slate-500 text-xs">{item.description}</td>
-                              <td className="px-6 py-3 text-right font-bold text-red-600">{item.quantity} {item.unit}</td>
-                           </tr>
-                        ))}
-                     </tbody>
-                  </table>
-                ) : (
-                  <div className="p-8 text-center text-slate-400 text-sm">All stock levels are healthy.</div>
-                )}
-             </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-             <div className="px-6 py-4 border-b border-slate-100">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                   <Activity className="text-blue-500" size={18} /> Recent Activity
-                </h3>
-             </div>
-             <div className="flex-1 overflow-y-auto p-0">
-                 <div className="divide-y divide-slate-50">
-                    {activityFeed.map((item: any) => (
-                       <div key={item.id} className="px-6 py-4 flex items-center gap-4 hover:bg-slate-50">
-                          <div className={`p-2 rounded-full ${item.color} shrink-0`}>
-                             {item.icon}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                             <div className="text-sm font-medium text-slate-800 truncate">{item.label}</div>
-                             <div className="text-xs text-slate-500">{formatDate(item.date)}</div>
-                          </div>
-                       </div>
-                    ))}
-                 </div>
-             </div>
-          </div>
-       </div>
-    </div>
-  );
-};
-
-const ActivityLogView = ({ logs }: { logs: LogEntry[] }) => {
-  const [search, setSearch] = useState('');
-  const [filterModule, setFilterModule] = useState('All');
-  
-  const filteredLogs = logs.filter(log => {
-     const matchesSearch = 
-        log.user.toLowerCase().includes(search.toLowerCase()) ||
-        log.action.toLowerCase().includes(search.toLowerCase()) ||
-        log.details.toLowerCase().includes(search.toLowerCase());
-     const matchesModule = filterModule === 'All' || log.module === filterModule;
-     return matchesSearch && matchesModule;
-  }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-  const handleExport = () => {
-     exportToCSV(filteredLogs, `Activity_Logs_${new Date().toISOString().split('T')[0]}`);
-  }
-
-  const modules = Array.from(new Set(logs.map(l => l.module)));
-
-  return (
-     <div className="space-y-6">
-         <div className="flex justify-between items-center">
-            <div>
-               <h2 className="text-xl font-bold text-slate-800">Activity Logs</h2>
-               <p className="text-sm text-slate-500">Audit trail of user actions across the system</p>
-            </div>
-            <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">
-               <Download className="w-4 h-4" /> Export CSV
-            </button>
-         </div>
-
-         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
-            <div className="w-full md:w-64">
-               <label className="block text-xs font-medium text-slate-700 mb-1">Search Logs</label>
-               <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input 
-                     className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" 
-                     placeholder="Search user, action..."
-                     value={search} 
-                     onChange={e => setSearch(e.target.value)} 
-                  />
-               </div>
-            </div>
-            <div className="w-full md:w-48">
-               <label className="block text-xs font-medium text-slate-700 mb-1">Filter Module</label>
-               <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterModule} onChange={e => setFilterModule(e.target.value)}>
-                  <option value="All">All Modules</option>
-                  {modules.map(m => <option key={m} value={m}>{m}</option>)}
-               </select>
-            </div>
-         </div>
-
-         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <table className="w-full text-left text-sm">
-               <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-                  <tr>
-                     <th className="px-6 py-3">Timestamp</th>
-                     <th className="px-6 py-3">User</th>
-                     <th className="px-6 py-3">Module</th>
-                     <th className="px-6 py-3">Action</th>
-                     <th className="px-6 py-3">Details</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                  {filteredLogs.map(log => (
-                     <tr key={log.id} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap font-mono text-xs">{formatDateTime(log.timestamp)}</td>
-                        <td className="px-6 py-4">
-                           <div className="font-medium text-slate-800">{log.user}</div>
-                           <div className="text-xs text-slate-500">{log.role}</div>
-                        </td>
-                        <td className="px-6 py-4 text-slate-600">{log.module}</td>
-                        <td className="px-6 py-4 font-medium text-blue-600">{log.action}</td>
-                        <td className="px-6 py-4 text-slate-600">{log.details}</td>
-                     </tr>
-                  ))}
-                  {filteredLogs.length === 0 && (
-                     <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400">No logs found matching your criteria.</td></tr>
-                  )}
-               </tbody>
-            </table>
-         </div>
-     </div>
-  );
-};
-
-
-const ReportLayout = ({ title, children, onBack, onExportCSV, onPrint }: any) => (
-  <div className="space-y-6">
-    <div className="flex items-center gap-4">
-      <button onClick={onBack} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all">
-        <Undo2 size={20} className="text-slate-500" />
-      </button>
-      <h1 className="text-xl font-bold text-slate-800">{title}</h1>
-      <div className="ml-auto flex gap-2">
-        <button onClick={onExportCSV} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">
-          <Download className="w-4 h-4" /> Export CSV
-        </button>
-        <button onClick={onPrint} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-          <Printer className="w-4 h-4" /> Print
-        </button>
-      </div>
-    </div>
-    {children}
-  </div>
-);
-
-const PPEInventoryReport = ({ assets, departments, locations, categories, onBack }: any) => {
-  const [filterDept, setFilterDept] = useState('All');
-  const [filterLoc, setFilterLoc] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-
-  const filteredData = useMemo(() => {
-    return assets.filter((a: Asset) => {
-      if (filterDept !== 'All' && a.departmentId !== filterDept) return false;
-      if (filterLoc !== 'All' && a.locationId !== filterLoc) return false;
-      if (filterStatus !== 'All' && a.status !== filterStatus) return false;
-      return true;
-    });
-  }, [assets, filterDept, filterLoc, filterStatus]);
-
-  const totalValue = filteredData.reduce((sum: number, a: Asset) => sum + a.unitValue, 0);
-
-  const handleExport = () => {
-    const exportData = filteredData.map((a: Asset) => ({
-       PropertyNo: a.propertyNumber,
-       Description: a.description,
-       DateAcquired: a.dateAcquired,
-       UnitValue: a.unitValue,
-       Status: a.status,
-       Department: departments.find((d: Department) => d.id === a.departmentId)?.code || '',
-       Location: locations.find((l: Location) => l.id === a.locationId)?.name || ''
-    }));
-    exportToCSV(exportData, `PPE_Report_${new Date().toISOString().split('T')[0]}`);
-  };
-
-  const handlePrint = () => window.print();
-
-  return (
-    <ReportLayout title="PPE Inventory Report" onBack={onBack} onExportCSV={handleExport} onPrint={handlePrint}>
-       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-end no-print">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Department</label>
-            <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
-              <option value="All">All Departments</option>
-              {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Location</label>
-            <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterLoc} onChange={e => setFilterLoc(e.target.value)}>
-              <option value="All">All Locations</option>
-              {locations.map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
-            <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Retired">Retired</option>
-              <option value="Missing">Missing</option>
-            </select>
-          </div>
-       </div>
-
-       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden print-border-none">
-          <div className="hidden print:block p-4 text-center font-bold text-lg uppercase">PPE Inventory Report</div>
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3">Property No</th>
-                <th className="px-6 py-3">Description</th>
-                <th className="px-6 py-3">Acquired</th>
-                <th className="px-6 py-3">Department</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3 text-right">Value</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-               {filteredData.map((a: Asset) => (
-                 <tr key={a.id}>
-                    <td className="px-6 py-4 font-mono text-xs">{a.propertyNumber}</td>
-                    <td className="px-6 py-4">{a.description}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{formatDate(a.dateAcquired)}</td>
-                    <td className="px-6 py-4">{departments.find((d: Department) => d.id === a.departmentId)?.code}</td>
-                    <td className="px-6 py-4 text-xs font-medium uppercase">{a.status}</td>
-                    <td className="px-6 py-4 text-right font-medium">{formatCurrency(a.unitValue)}</td>
-                 </tr>
-               ))}
-               <tr className="bg-slate-50 font-bold">
-                 <td colSpan={5} className="px-6 py-4 text-right uppercase">Total Asset Value</td>
-                 <td className="px-6 py-4 text-right">{formatCurrency(totalValue)}</td>
-               </tr>
-            </tbody>
-          </table>
-       </div>
-    </ReportLayout>
-  );
-};
-
-const ConsumableReport = ({ catalog, transactions, onBack }: any) => {
-  const consumables = catalog.filter((c: CatalogItem) => c.itemType === 'Consumable');
-  const [search, setSearch] = useState('');
-  
-  // Calculate movement
-  const reportData = useMemo(() => {
-     return consumables.filter((c: CatalogItem) => c.article.toLowerCase().includes(search.toLowerCase())).map((c: CatalogItem) => {
-        const relevantTxItems = transactions.flatMap((t: Transaction) => 
-           t.items.filter(ti => ti.catalogItemId === c.id).map(ti => ({ ...ti, type: t.type }))
-        );
-        
-        const totalIn = relevantTxItems.filter((i: any) => i.type === 'Stock In').reduce((acc: number, i: any) => acc + i.quantity, 0);
-        const totalOut = relevantTxItems.filter((i: any) => i.type === 'Stock Out').reduce((acc: number, i: any) => acc + i.quantity, 0);
-
-        return {
-          ...c,
-          totalIn,
-          totalOut,
-          balance: c.quantity
-        };
-     });
-  }, [consumables, transactions, search]);
-
-  const handleExport = () => {
-    const exportData = reportData.map((r: any) => ({
-      Item: r.article,
-      Description: r.description,
-      Unit: r.unit,
-      TotalIn: r.totalIn,
-      TotalOut: r.totalOut,
-      Balance: r.balance
-    }));
-    exportToCSV(exportData, 'Consumable_Stock_Report');
-  };
-
-  return (
-    <ReportLayout title="Consumable Stock Report" onBack={onBack} onExportCSV={handleExport} onPrint={() => window.print()}>
-       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-end no-print">
-          <div className="w-64">
-            <label className="block text-xs font-medium text-slate-700 mb-1">Search Item</label>
-            <div className="relative">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-               <input 
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" 
-                  placeholder="e.g. Bond Paper"
-                  value={search} 
-                  onChange={e => setSearch(e.target.value)} 
-               />
-            </div>
-          </div>
-       </div>
-       
-       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-               <tr>
-                 <th className="px-6 py-3">Item Name</th>
-                 <th className="px-6 py-3">Description</th>
-                 <th className="px-6 py-3 text-center">Unit</th>
-                 <th className="px-6 py-3 text-center">Total Stock In</th>
-                 <th className="px-6 py-3 text-center">Total Stock Out</th>
-                 <th className="px-6 py-3 text-center font-bold text-slate-800">Current Balance</th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-               {reportData.map((r: any) => (
-                  <tr key={r.id}>
-                     <td className="px-6 py-4 font-medium text-slate-800">{r.article}</td>
-                     <td className="px-6 py-4 text-slate-600">{r.description}</td>
-                     <td className="px-6 py-4 text-center text-xs uppercase">{r.unit}</td>
-                     <td className="px-6 py-4 text-center text-emerald-600 font-medium">+{r.totalIn}</td>
-                     <td className="px-6 py-4 text-center text-amber-600 font-medium">-{r.totalOut}</td>
-                     <td className="px-6 py-4 text-center font-bold text-blue-700 bg-blue-50">{r.balance}</td>
-                  </tr>
-               ))}
-            </tbody>
-          </table>
-       </div>
-    </ReportLayout>
-  );
-};
-
-const StockMovementReport = ({ transactions, catalog, departments, onBack }: any) => {
-   const [filterType, setFilterType] = useState('All');
-   const [filterDept, setFilterDept] = useState('All');
-   
-   const flatTransactions = useMemo(() => {
-      return transactions.flatMap((t: Transaction) => 
-         t.items.map(item => ({
-            ...item,
-            txDate: t.date,
-            txId: t.transactionId,
-            txType: t.type,
-            txDept: t.departmentId,
-            itemName: catalog.find((c: CatalogItem) => c.id === item.catalogItemId)?.article || 'Unknown'
-         }))
-      ).filter((row: any) => {
-         if (filterType !== 'All' && row.txType !== filterType) return false;
-         if (filterDept !== 'All' && row.txDept !== filterDept) return false;
-         return true;
+  const chartData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months.map((monthName, index) => {
+      const monthlyTxs = transactions.filter(t => {
+        const d = new Date(t.date);
+        const matchesYear = d.getFullYear() === selectedYear;
+        const matchesMonth = d.getMonth() === index;
+        const matchesDept = selectedDept === 'All' || t.departmentId === selectedDept;
+        return matchesYear && matchesMonth && matchesDept;
       });
-   }, [transactions, catalog, filterType, filterDept]);
+      const inCount = monthlyTxs.filter(t => t.type === 'Stock In').reduce((sum, t) => sum + t.items.reduce((iSum, item) => iSum + item.quantity, 0), 0);
+      const outCount = monthlyTxs.filter(t => t.type === 'Stock Out').reduce((sum, t) => sum + t.items.reduce((iSum, item) => iSum + item.quantity, 0), 0);
+      return { month: monthName, in: inCount, out: outCount };
+    });
+  }, [transactions, selectedYear, selectedDept]);
 
-   const handleExport = () => {
-      const exportData = flatTransactions.map((r: any) => ({
-         TxID: r.txId,
-         Date: r.txDate,
-         Type: r.txType,
-         Department: departments.find((d: Department) => d.id === r.txDept)?.code || '',
-         Item: r.itemName,
-         Quantity: r.quantity,
-         Remarks: r.remarks
-      }));
-      exportToCSV(exportData, 'Stock_Movement_Report');
-   }
-
-   return (
-      <ReportLayout title="Stock Movement Report" onBack={onBack} onExportCSV={handleExport} onPrint={() => window.print()}>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4 items-end no-print">
-            <div>
-               <label className="block text-xs font-medium text-slate-700 mb-1">Transaction Type</label>
-               <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterType} onChange={e => setFilterType(e.target.value)}>
-                  <option value="All">All Types</option>
-                  <option value="Stock In">Stock In</option>
-                  <option value="Stock Out">Stock Out</option>
-               </select>
-            </div>
-            <div>
-               <label className="block text-xs font-medium text-slate-700 mb-1">Department</label>
-               <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
-                  <option value="All">All Departments</option>
-                  {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
-               </select>
-            </div>
-          </div>
-          
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-             <table className="w-full text-left text-sm">
-               <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-                  <tr>
-                     <th className="px-6 py-3">Date</th>
-                     <th className="px-6 py-3">Tx ID</th>
-                     <th className="px-6 py-3">Type</th>
-                     <th className="px-6 py-3">Department</th>
-                     <th className="px-6 py-3">Item</th>
-                     <th className="px-6 py-3 text-center">Qty</th>
-                     <th className="px-6 py-3">Remarks</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                  {flatTransactions.map((row: any, idx: number) => (
-                     <tr key={idx}>
-                        <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{formatDate(row.txDate)}</td>
-                        <td className="px-6 py-4 font-mono text-xs">{row.txId}</td>
-                        <td className="px-6 py-4">
-                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${row.txType === 'Stock In' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {row.txType}
-                           </span>
-                        </td>
-                        <td className="px-6 py-4">{departments.find((d: Department) => d.id === row.txDept)?.code || '-'}</td>
-                        <td className="px-6 py-4 font-medium">{row.itemName}</td>
-                        <td className="px-6 py-4 text-center font-medium">{row.quantity}</td>
-                        <td className="px-6 py-4 text-slate-500 italic">{row.remarks}</td>
-                     </tr>
-                  ))}
-               </tbody>
-             </table>
-          </div>
-      </ReportLayout>
-   );
-};
-
-const ReportsModule = ({ assets, departments, locations, categories, catalog, transactions, audits }: any) => {
-  const [activeReport, setActiveReport] = useState<string | null>(null);
-
-  if (activeReport === 'ppe') return <PPEInventoryReport assets={assets} departments={departments} locations={locations} categories={categories} onBack={() => setActiveReport(null)} />;
-  if (activeReport === 'consumable') return <ConsumableReport catalog={catalog} transactions={transactions} onBack={() => setActiveReport(null)} />;
-  if (activeReport === 'movement') return <StockMovementReport transactions={transactions} catalog={catalog} departments={departments} onBack={() => setActiveReport(null)} />;
+  const maxVal = Math.max(...chartData.map(d => Math.max(d.in, d.out)), 10);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-       <div onClick={() => setActiveReport('ppe')} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md cursor-pointer transition-all group">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg w-fit mb-4 group-hover:scale-110 transition-transform"><Monitor size={24} /></div>
-          <h3 className="font-bold text-slate-800 mb-2">PPE Inventory Report</h3>
-          <p className="text-sm text-slate-500">Detailed list of all Property, Plant, and Equipment by department and location.</p>
-       </div>
-       <div onClick={() => setActiveReport('consumable')} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md cursor-pointer transition-all group">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg w-fit mb-4 group-hover:scale-110 transition-transform"><Archive size={24} /></div>
-          <h3 className="font-bold text-slate-800 mb-2">Consumable Stock Report</h3>
-          <p className="text-sm text-slate-500">Current stock levels, total in/out movements for supplies and consumables.</p>
-       </div>
-       <div onClick={() => setActiveReport('movement')} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md cursor-pointer transition-all group">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-lg w-fit mb-4 group-hover:scale-110 transition-transform"><ArrowRightLeft size={24} /></div>
-          <h3 className="font-bold text-slate-800 mb-2">Stock Movement Report</h3>
-          <p className="text-sm text-slate-500">History of all stock transactions (in/out) filtered by date and type.</p>
-       </div>
-    </div>
-  );
-};
-
-const StockTransactionForm = ({ departments, locations, catalog, employees, onCancel, onSave }: any) => {
-  const [transactionId] = useState(`TXN-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [type, setType] = useState<TransactionType>('Stock In');
-  const [departmentId, setDepartmentId] = useState('');
-  const [remarks, setRemarks] = useState('');
-  const [items, setItems] = useState<TransactionItem[]>([]);
-  const [selectedCatalogId, setSelectedCatalogId] = useState('');
-  const [qty, setQty] = useState(1);
-  const [itemRemarks, setItemRemarks] = useState('');
-  const [itemCustodian, setItemCustodian] = useState('');
-
-  const catalogItem = catalog.find((c: CatalogItem) => c.id === selectedCatalogId);
-  
-  const handleAddItem = () => {
-     if (!selectedCatalogId || qty <= 0) return;
-     
-     // Validate Stock Out quantity
-     if (type === 'Stock Out' && catalogItem) {
-        if (qty > catalogItem.quantity) {
-           alert(`Insufficient stock! Only ${catalogItem.quantity} available.`);
-           return;
-        }
-     }
-
-     const newItem: TransactionItem = {
-        id: generateId(),
-        catalogItemId: selectedCatalogId,
-        quantity: qty,
-        remarks: itemRemarks,
-        custodianId: itemCustodian
-     };
-     
-     setItems([...items, newItem]);
-     setSelectedCatalogId('');
-     setQty(1);
-     setItemRemarks('');
-     setItemCustodian('');
-  };
-
-  const removeItem = (id: string) => setItems(items.filter(i => i.id !== id));
-
-  const handleSave = () => {
-     if (!departmentId || items.length === 0) {
-        alert('Please select a department and add at least one item.');
-        return;
-     }
-
-     const tx: Transaction = {
-        id: generateId(),
-        transactionId,
-        date,
-        type,
-        departmentId,
-        items,
-        status: 'Completed',
-        remarks,
-        createdBy: 'Admin',
-        createdAt: new Date().toISOString()
-     };
-     
-     onSave(tx);
-  };
-
-  // Filter for Consumables only as per rules
-  const consumableItems = catalog.filter((c: CatalogItem) => c.itemType === 'Consumable' && c.status === 'Active');
-
-  return (
-     <div className="max-w-4xl mx-auto">
-         <div className="flex items-center gap-2 mb-6 text-slate-500 text-sm">
-            <button onClick={onCancel} className="hover:text-blue-600">Stock Transactions</button>
-            <ChevronRight size={14} />
-            <span className="font-medium text-slate-800">New Transaction</span>
-         </div>
-
-         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-            <div className="p-6 border-b border-slate-100">
-               <h2 className="font-semibold text-lg text-slate-800">New Stock Transaction</h2>
-            </div>
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-               <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Transaction Type</label>
-                  <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={type} onChange={e => { setType(e.target.value as TransactionType); setItems([]); }}>
-                     <option value="Stock In">Stock In (Receiving)</option>
-                     <option value="Stock Out">Stock Out (Issuance)</option>
-                  </select>
-               </div>
-               <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Date</label>
-                  <input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={date} onChange={e => setDate(e.target.value)} />
-               </div>
-               <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Department (Source/Destination)</label>
-                  <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={departmentId} onChange={e => setDepartmentId(e.target.value)}>
-                     <option value="">Select Department...</option>
-                     {departments.filter((d: Department) => d.status === 'Active').map((d: Department) => (
-                        <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
-                     ))}
-                  </select>
-               </div>
-               <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">General Remarks</label>
-                  <input className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Optional notes..." />
-               </div>
-            </div>
-         </div>
-
-         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-end gap-3">
-               <div className="flex-1">
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Select Consumable Item</label>
-                  <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={selectedCatalogId} onChange={e => setSelectedCatalogId(e.target.value)}>
-                     <option value="">Search Item...</option>
-                     {consumableItems.map((c: CatalogItem) => (
-                        <option key={c.id} value={c.id}>{c.article} ({c.quantity} on hand)</option>
-                     ))}
-                  </select>
-               </div>
-               <div className="w-24">
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Qty</label>
-                  <input type="number" min="1" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={qty} onChange={e => setQty(parseInt(e.target.value))} />
-               </div>
-                <div className="w-48">
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Item Remarks</label>
-                  <input className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={itemRemarks} onChange={e => setItemRemarks(e.target.value)} placeholder="Details..." />
-               </div>
-               <button onClick={handleAddItem} disabled={!selectedCatalogId} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">Add</button>
-            </div>
-            
-            <table className="w-full text-left text-sm">
-               <thead className="text-slate-500 border-b border-slate-100">
-                  <tr>
-                     <th className="px-6 py-3">Item</th>
-                     <th className="px-6 py-3 text-center">Qty</th>
-                     <th className="px-6 py-3">Remarks</th>
-                     <th className="px-6 py-3"></th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-50">
-                  {items.map(item => {
-                     const catItem = catalog.find((c: CatalogItem) => c.id === item.catalogItemId);
-                     return (
-                        <tr key={item.id}>
-                           <td className="px-6 py-3 font-medium">{catItem?.article}</td>
-                           <td className="px-6 py-3 text-center">{item.quantity}</td>
-                           <td className="px-6 py-3 text-slate-500">{item.remarks}</td>
-                           <td className="px-6 py-3 text-right"><button onClick={() => removeItem(item.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><X size={14}/></button></td>
-                        </tr>
-                     )
-                  })}
-                  {items.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">No items added yet.</td></tr>}
-               </tbody>
-            </table>
-         </div>
-
-         <div className="flex justify-end gap-3 mt-6">
-             <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
-             <button onClick={handleSave} disabled={items.length === 0 || !departmentId} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">Submit Transaction</button>
-         </div>
-     </div>
-  )
-}
-
-// --- Consumables Catalog View Component (Redesigned) ---
-const ConsumablesCatalogView = ({ catalog, setCatalog, categories, funds, onLog }: any) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [sortConfig, setSortConfig] = useState({ key: 'article', direction: 'asc' });
-  
-  const [formData, setFormData] = useState<Partial<CatalogItem>>({
-    article: '',
-    description: '',
-    unit: 'pc',
-    itemType: 'Consumable',
-    categoryId: '',
-    fundClusterId: '',
-    unitValue: 0,
-    quantity: 0,
-    reorderPoint: 10,
-    status: 'Active'
-  });
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  // Standardized Units
-  const UNIT_OPTIONS = ['pc', 'box', 'ream', 'bottle', 'set', 'roll', 'pack', 'can', 'meter', 'liter', 'pad', 'cartridge'];
-
-  const handleSave = () => {
-    // Validation
-    if (!formData.article || !formData.unit || !formData.categoryId) {
-       alert('Please fill in all required fields (Item Name, Unit, Category).');
-       return;
-    }
-
-    // Unique Name Check
-    const duplicate = catalog.find((c: CatalogItem) => 
-      c.itemType === 'Consumable' && 
-      c.status === 'Active' && 
-      c.article.toLowerCase() === formData.article?.toLowerCase() && 
-      c.id !== editingId
-    );
-
-    if (duplicate) {
-      alert('An active consumable item with this name already exists. Please use a unique name.');
-      return;
-    }
-
-    if (editingId) {
-       setCatalog((prev: CatalogItem[]) => prev.map(item => item.id === editingId ? { ...item, ...formData } : item));
-       onLog('Updated Consumable', 'Consumables', `Updated item ${formData.article}`);
-    } else {
-       const newItem = { ...formData, id: generateId(), quantity: 0 }; // Initial On Hand is 0 (System Calculated)
-       setCatalog((prev: CatalogItem[]) => [...prev, newItem]);
-       onLog('Created Consumable', 'Consumables', `Created item ${formData.article}`);
-    }
-    setIsModalOpen(false);
-    setEditingId(null);
-    resetForm();
-  };
-
-  const resetForm = () => {
-    setFormData({ 
-      article: '', 
-      description: '', 
-      unit: 'pc', 
-      itemType: 'Consumable', 
-      categoryId: '', 
-      fundClusterId: '', 
-      unitValue: 0, 
-      quantity: 0, 
-      reorderPoint: 10, 
-      status: 'Active' 
-    });
-  };
-
-  const handleEdit = (item: CatalogItem) => {
-    setFormData(item);
-    setEditingId(item.id);
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to deactivate this item? It will be hidden from transaction selections.')) {
-       setCatalog((prev: CatalogItem[]) => prev.map(item => item.id === id ? { ...item, status: 'Inactive' } : item));
-       onLog('Deactivated Consumable', 'Consumables', `Deactivated item ID ${id}`);
-    }
-  };
-
-  const handleSort = (key: string) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const filteredData = useMemo(() => {
-    let data = catalog.filter((item: CatalogItem) => {
-       // Strict Filter: Only Consumables
-       if (item.itemType !== 'Consumable') return false;
-
-       const matchesSearch = item.article.toLowerCase().includes(searchTerm.toLowerCase()) || item.description.toLowerCase().includes(searchTerm.toLowerCase());
-       const matchesCategory = filterCategory === 'All' || item.categoryId === filterCategory;
-       const matchesStatus = filterStatus === 'All' || item.status === filterStatus;
-       return matchesSearch && matchesCategory && matchesStatus;
-    });
-
-    // Sorting
-    data.sort((a: any, b: any) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return data;
-  }, [catalog, searchTerm, filterCategory, filterStatus, sortConfig]);
-
-  const handleExport = () => {
-    const exportData = filteredData.map((c: CatalogItem) => ({
-      ItemName: c.article,
-      Description: c.description,
-      Category: categories.find((cat: AssetCategory) => cat.id === c.categoryId)?.name || '',
-      Unit: c.unit,
-      OnHand: c.quantity,
-      ReorderPoint: c.reorderPoint,
-      Status: c.status
-    }));
-    exportToCSV(exportData, 'Consumables_Master_List');
-  };
-
-  return (
-    <div className="space-y-4">
-       <div className="flex justify-between items-center">
-          <div className="flex gap-3">
-             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                   className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none w-64" 
-                   placeholder="Search Item Name..."
-                   value={searchTerm}
-                   onChange={e => setSearchTerm(e.target.value)}
-                />
-             </div>
-             <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                <option value="All">All Categories</option>
-                {categories.filter((c:AssetCategory) => c.type === 'Consumable').map((c: AssetCategory) => <option key={c.id} value={c.id}>{c.name}</option>)}
-             </select>
-              <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                <option value="All">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-             </select>
-          </div>
+    <div className="w-full">
+       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
           <div className="flex gap-2">
-            <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">
-                <Download className="w-4 h-4" /> Export
-            </button>
-            <button onClick={() => { setEditingId(null); resetForm(); setIsModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-               <Plus className="w-4 h-4" /> Add Consumable
-            </button>
-          </div>
-       </div>
-
-       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full text-left text-sm">
-             <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-                <tr>
-                   <th className="px-6 py-3 cursor-pointer hover:text-blue-600" onClick={() => handleSort('article')}>Item Name <ArrowUpDown className="inline w-3 h-3 ml-1"/></th>
-                   <th className="px-6 py-3">Category</th>
-                   <th className="px-6 py-3">Unit</th>
-                   <th className="px-6 py-3 text-center cursor-pointer hover:text-blue-600" onClick={() => handleSort('quantity')}>On Hand <ArrowUpDown className="inline w-3 h-3 ml-1"/></th>
-                   <th className="px-6 py-3 text-center">Reorder Level</th>
-                   <th className="px-6 py-3 text-center">Status</th>
-                   <th className="px-6 py-3 text-right">Actions</th>
-                </tr>
-             </thead>
-             <tbody className="divide-y divide-slate-100">
-                {filteredData.map((item: CatalogItem) => {
-                   const isLowStock = item.quantity <= (item.reorderPoint || 0) && item.status === 'Active';
-                   return (
-                   <tr key={item.id} className={`hover:bg-slate-50 ${item.status === 'Inactive' ? 'opacity-50 bg-slate-50' : ''}`}>
-                      <td className="px-6 py-4">
-                         <div className="font-medium text-slate-800">{item.article}</div>
-                         {item.description && <div className="text-xs text-slate-500 truncate max-w-xs" title={item.description}>{item.description}</div>}
-                      </td>
-                      <td className="px-6 py-4 text-slate-600">{categories.find((c: AssetCategory) => c.id === item.categoryId)?.name}</td>
-                      <td className="px-6 py-4 text-slate-600 uppercase text-xs">{item.unit}</td>
-                      <td className="px-6 py-4 text-center font-medium">
-                        <div className={`flex items-center justify-center gap-1 ${isLowStock ? 'text-red-600 font-bold' : 'text-slate-700'}`}>
-                          {isLowStock && <AlertCircle className="w-3 h-3" />}
-                          {item.quantity}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center text-slate-500 text-xs">{item.reorderPoint || '-'}</td>
-                      <td className="px-6 py-4 text-center">
-                         {item.status === 'Active' ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Active</span> : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800">Inactive</span>}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                         <button onClick={() => handleEdit(item)} className="text-slate-400 hover:text-blue-600 mx-1" title="Edit"><Pencil className="w-4 h-4" /></button>
-                         {item.status === 'Active' && <button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-600 mx-1" title="Deactivate"><Trash2 className="w-4 h-4" /></button>}
-                      </td>
-                   </tr>
-                )})}
-                {filteredData.length === 0 && (
-                   <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-400">No consumable items found.</td></tr>
-                )}
-             </tbody>
-          </table>
-       </div>
-
-       {isModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-             <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                   <h3 className="font-semibold text-slate-800">{editingId ? 'Edit Consumable' : 'New Consumable Item'}</h3>
-                   <button onClick={() => setIsModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
-                </div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Item Name *</label>
-                      <input className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500" value={formData.article} onChange={e => setFormData({...formData, article: e.target.value})} placeholder="e.g. Bond Paper A4" />
-                   </div>
-                   <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Description (Specs)</label>
-                      <textarea className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Brand, Size, Color, etc." rows={2} />
-                   </div>
-                   
-                   {/* Hidden Item Type - Always Consumable */}
-                   
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Category *</label>
-                      <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-blue-500" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
-                         <option value="">Select Category...</option>
-                         {categories.filter((c:AssetCategory) => c.type === 'Consumable').map((c: AssetCategory) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Unit of Measurement *</label>
-                      <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-blue-500" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
-                         {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Fund Cluster (Optional)</label>
-                      <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-blue-500" value={formData.fundClusterId} onChange={e => setFormData({...formData, fundClusterId: e.target.value})}>
-                         <option value="">Select Fund...</option>
-                         {funds.map((f: FundCluster) => <option key={f.id} value={f.id}>{f.code} - {f.description}</option>)}
-                      </select>
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Reorder Threshold</label>
-                      <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500" value={formData.reorderPoint} onChange={e => setFormData({...formData, reorderPoint: parseFloat(e.target.value)})} />
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Unit Value (Cost)</label>
-                      <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500" value={formData.unitValue} onChange={e => setFormData({...formData, unitValue: parseFloat(e.target.value)})} />
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
-                      <div className="flex items-center gap-4 mt-2">
-                         <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                            <input type="radio" name="status" value="Active" checked={formData.status === 'Active'} onChange={() => setFormData({...formData, status: 'Active'})} /> Active
-                         </label>
-                         <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                            <input type="radio" name="status" value="Inactive" checked={formData.status === 'Inactive'} onChange={() => setFormData({...formData, status: 'Inactive'})} /> Inactive
-                         </label>
-                      </div>
-                   </div>
-                   
-                   <div className="md:col-span-2 mt-2 p-3 bg-blue-50 rounded-lg flex items-start gap-2">
-                      <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-xs text-blue-700">
-                        <strong>Note:</strong> "On Hand" quantity is not editable here. It is automatically calculated based on Stock In and Stock Out transactions.
-                      </p>
-                   </div>
-
-                </div>
-                <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3">
-                   <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
-                   <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Save Item</button>
-                </div>
-             </div>
-          </div>
-       )}
-    </div>
-  );
-};
-
-// --- PPE Catalog View Component ---
-const PPECatalogView = ({ catalog, setCatalog, categories, funds, onLog }: any) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('All');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  
-  const [formData, setFormData] = useState<Partial<CatalogItem>>({
-    article: '',
-    description: '',
-    unit: 'unit',
-    itemType: 'PPE',
-    categoryId: '',
-    fundClusterId: '',
-    unitValue: 0,
-    quantity: 0,
-    reorderPoint: 0,
-    status: 'Active'
-  });
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  // Standardized Units
-  const UNIT_OPTIONS = ['unit', 'pc', 'box', 'ream', 'bottle', 'set', 'roll', 'pack', 'can', 'meter', 'lot'];
-
-  const handleSave = () => {
-    if (!formData.article || !formData.description || !formData.categoryId || !formData.fundClusterId || !formData.unit) {
-       alert('Please fill in all required fields.');
-       return;
-    }
-
-    if (editingId) {
-       setCatalog((prev: CatalogItem[]) => prev.map(item => item.id === editingId ? { ...item, ...formData } : item));
-       onLog('Updated Catalog Item', 'PPE Catalog', `Updated item ${formData.article}`);
-    } else {
-       const newItem = { ...formData, id: generateId(), quantity: 0 }; // Initial Quantity is 0
-       setCatalog((prev: CatalogItem[]) => [...prev, newItem]);
-       onLog('Created Catalog Item', 'PPE Catalog', `Created item ${formData.article}`);
-    }
-    setIsModalOpen(false);
-    setEditingId(null);
-    setFormData({ article: '', description: '', unit: 'unit', itemType: 'PPE', categoryId: '', fundClusterId: '', unitValue: 0, quantity: 0, reorderPoint: 0, status: 'Active' });
-  };
-
-  const handleEdit = (item: CatalogItem) => {
-    setFormData(item);
-    setEditingId(item.id);
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this item? It will be marked as inactive.')) {
-       setCatalog((prev: CatalogItem[]) => prev.map(item => item.id === id ? { ...item, status: 'Inactive' } : item));
-       onLog('Deactivated Catalog Item', 'PPE Catalog', `Deactivated item ID ${id}`);
-    }
-  };
-
-  const filteredData = useMemo(() => {
-    return catalog.filter((item: CatalogItem) => {
-       const matchesSearch = item.article.toLowerCase().includes(searchTerm.toLowerCase()) || item.description.toLowerCase().includes(searchTerm.toLowerCase());
-       const matchesType = filterType === 'All' || item.itemType === filterType;
-       const matchesCategory = filterCategory === 'All' || item.categoryId === filterCategory;
-       const matchesStatus = filterStatus === 'All' || item.status === filterStatus;
-       return matchesSearch && matchesType && matchesCategory && matchesStatus;
-    });
-  }, [catalog, searchTerm, filterType, filterCategory, filterStatus]);
-
-  return (
-    <div className="space-y-4">
-       <div className="flex justify-between items-center">
-          <div className="flex gap-3">
-             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                   className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none w-64" 
-                   placeholder="Search Article or Description..."
-                   value={searchTerm}
-                   onChange={e => setSearchTerm(e.target.value)}
-                />
-             </div>
-             <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterType} onChange={e => setFilterType(e.target.value)}>
-                <option value="All">All Types</option>
-                <option value="PPE">PPE</option>
-                <option value="Consumable">Consumable</option>
+             <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-[#006400]">
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
              </select>
-             <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                <option value="All">All Categories</option>
-                {categories.map((c: AssetCategory) => <option key={c.id} value={c.id}>{c.name}</option>)}
-             </select>
-              <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                <option value="All">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
+             <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-[#006400] max-w-[120px]">
+                <option value="All">All Depts</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.code}</option>)}
              </select>
           </div>
-          <button onClick={() => { setEditingId(null); setFormData({ article: '', description: '', unit: 'unit', itemType: 'PPE', categoryId: '', fundClusterId: '', unitValue: 0, quantity: 0, reorderPoint: 0, status: 'Active' }); setIsModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-             <Plus className="w-4 h-4" /> Add Item
-          </button>
-       </div>
-
-       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full text-left text-sm">
-             <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-                <tr>
-                   <th className="px-6 py-3">Article</th>
-                   <th className="px-6 py-3">Type</th>
-                   <th className="px-6 py-3">Category</th>
-                   <th className="px-6 py-3">Unit</th>
-                   <th className="px-6 py-3 text-center">On Hand</th>
-                   <th className="px-6 py-3 text-center">Reorder</th>
-                   <th className="px-6 py-3 text-center">Active</th>
-                   <th className="px-6 py-3 text-right">Actions</th>
-                </tr>
-             </thead>
-             <tbody className="divide-y divide-slate-100">
-                {filteredData.map((item: CatalogItem) => (
-                   <tr key={item.id} className={`hover:bg-slate-50 ${item.status === 'Inactive' ? 'opacity-50 bg-slate-50' : ''}`}>
-                      <td className="px-6 py-4">
-                         <div className="font-medium text-slate-800">{item.article}</div>
-                         <div className="text-xs text-slate-500 truncate max-w-xs">{item.description}</div>
-                      </td>
-                      <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-medium ${item.itemType === 'PPE' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{item.itemType}</span></td>
-                      <td className="px-6 py-4 text-slate-600">{categories.find((c: AssetCategory) => c.id === item.categoryId)?.name}</td>
-                      <td className="px-6 py-4 text-slate-600">{item.unit}</td>
-                      <td className="px-6 py-4 text-center font-medium">{item.quantity}</td>
-                      <td className="px-6 py-4 text-center text-slate-500">{item.reorderPoint || '-'}</td>
-                      <td className="px-6 py-4 text-center">
-                         {item.status === 'Active' ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" /> : <X className="w-4 h-4 text-slate-400 mx-auto" />}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                         <button onClick={() => handleEdit(item)} className="text-slate-400 hover:text-blue-600 mx-1"><Pencil className="w-4 h-4" /></button>
-                         {item.status === 'Active' && <button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-600 mx-1"><Trash2 className="w-4 h-4" /></button>}
-                      </td>
-                   </tr>
-                ))}
-             </tbody>
-          </table>
-       </div>
-
-       {isModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-             <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                   <h3 className="font-semibold text-slate-800">{editingId ? 'Edit Catalog Item' : 'New Catalog Item'}</h3>
-                   <button onClick={() => setIsModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
-                </div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Article (Name) *</label>
-                      <input className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={formData.article} onChange={e => setFormData({...formData, article: e.target.value})} />
-                   </div>
-                   <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Description (Specs) *</label>
-                      <textarea className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Item Type *</label>
-                      <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={formData.itemType} onChange={e => setFormData({...formData, itemType: e.target.value as 'PPE' | 'Consumable'})}>
-                         <option value="PPE">PPE</option>
-                         <option value="Consumable">Consumable</option>
-                      </select>
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Category *</label>
-                      <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})}>
-                         <option value="">Select Category...</option>
-                         {categories.map((c: AssetCategory) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Unit of Measurement *</label>
-                      <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
-                         {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Fund Cluster *</label>
-                      <select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" value={formData.fundClusterId} onChange={e => setFormData({...formData, fundClusterId: e.target.value})}>
-                         <option value="">Select Fund...</option>
-                         {funds.map((f: FundCluster) => <option key={f.id} value={f.id}>{f.code} - {f.description}</option>)}
-                      </select>
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Unit Value (Standard Cost)</label>
-                      <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={formData.unitValue} onChange={e => setFormData({...formData, unitValue: parseFloat(e.target.value)})} />
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Reorder Threshold (Optional)</label>
-                      <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" value={formData.reorderPoint} onChange={e => setFormData({...formData, reorderPoint: parseFloat(e.target.value)})} />
-                   </div>
-                   <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
-                      <div className="flex items-center gap-4 mt-2">
-                         <label className="flex items-center gap-2 text-sm text-slate-600">
-                            <input type="radio" name="status" value="Active" checked={formData.status === 'Active'} onChange={() => setFormData({...formData, status: 'Active'})} /> Active
-                         </label>
-                         <label className="flex items-center gap-2 text-sm text-slate-600">
-                            <input type="radio" name="status" value="Inactive" checked={formData.status === 'Inactive'} onChange={() => setFormData({...formData, status: 'Inactive'})} /> Inactive
-                         </label>
-                      </div>
-                   </div>
-                </div>
-                <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3">
-                   <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
-                   <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Save Item</button>
-                </div>
-             </div>
+          <div className="flex bg-slate-100 rounded p-0.5">
+             <button onClick={() => setChartType('bar')} className={`p-1 rounded ${chartType === 'bar' ? 'bg-white shadow text-[#006400]' : 'text-slate-400 hover:text-slate-600'}`}><BarChart3 size={14} /></button>
+             <button onClick={() => setChartType('line')} className={`p-1 rounded ${chartType === 'line' ? 'bg-white shadow text-[#006400]' : 'text-slate-400 hover:text-slate-600'}`}><LineChart size={14} /></button>
           </div>
-       )}
-    </div>
-  );
-};
-
-const AssetForm = ({ asset, catalog, employees, departments, locations, funds, onSave, onCancel }: any) => {
-   const [formData, setFormData] = useState<Partial<Asset>>(
-    asset || {
-      propertyNumber: '',
-      quantity: 1,
-      dateAcquired: new Date().toISOString().split('T')[0],
-      status: 'Active',
-      unitValue: 0
-    }
-  );
-
-  const handleCatalogChange = (catalogId: string) => {
-    const item = catalog.find((c: CatalogItem) => c.id === catalogId);
-    setFormData(prev => ({
-      ...prev,
-      catalogItemId: catalogId,
-      description: item ? item.description : '',
-      fundClusterId: item ? item.fundClusterId : prev.fundClusterId, // Auto-populate fund
-      unitValue: item ? item.unitValue : prev.unitValue // Auto-populate cost
-    }));
-  };
-
-  const isValid = formData.propertyNumber && formData.catalogItemId && formData.unitValue && formData.departmentId && formData.fundClusterId && formData.locationId;
-
-  return (
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center gap-2 mb-6 text-slate-500 text-sm">
-        <button onClick={onCancel} className="hover:text-blue-600">Asset Registry</button>
-        <ChevronRight size={14} />
-        <span className="font-medium text-slate-800">{asset ? 'Edit Asset' : 'New Asset Registration'}</span>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-700 mb-1">Property Number *</label>
-                <input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm" value={formData.propertyNumber} onChange={e => setFormData({...formData, propertyNumber: e.target.value})} />
-            </div>
-            <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">PPE Item (Catalog) *</label>
-                <select className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm bg-white" value={formData.catalogItemId || ''} onChange={e => handleCatalogChange(e.target.value)}>
-                   <option value="">Select Item...</option>
-                   {catalog.filter((c: CatalogItem) => c.itemType === 'PPE' && c.status === 'Active').map((c: CatalogItem) => <option key={c.id} value={c.id}>{c.article}</option>)}
-                </select>
-            </div>
-            <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Unit Value *</label>
-                <input type="number" className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm" value={formData.unitValue} onChange={e => setFormData({...formData, unitValue: parseFloat(e.target.value)})} />
-            </div>
-             <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Date Acquired</label>
-                <input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm" value={formData.dateAcquired} onChange={e => setFormData({...formData, dateAcquired: e.target.value})} />
-            </div>
-            <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Fund Cluster *</label>
-                <select className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm bg-white" value={formData.fundClusterId || ''} onChange={e => setFormData({...formData, fundClusterId: e.target.value})}>
-                   <option value="">Select Fund...</option>
-                   {funds.filter((f: FundCluster) => f.status === 'Active').map((f: FundCluster) => <option key={f.id} value={f.id}>{f.code} - {f.description}</option>)}
-                </select>
-            </div>
-             <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Department *</label>
-                <select className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm bg-white" value={formData.departmentId || ''} onChange={e => setFormData({...formData, departmentId: e.target.value})}>
-                   <option value="">Select Department...</option>
-                   {departments.filter((d: Department) => d.status === 'Active').map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-            </div>
-             <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Location *</label>
-                <select className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm bg-white" value={formData.locationId || ''} onChange={e => setFormData({...formData, locationId: e.target.value})}>
-                   <option value="">Select Location...</option>
-                   {locations.filter((l: Location) => l.status === 'Active').map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-            </div>
-             <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Custodian (Optional)</label>
-                <select className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm bg-white" value={formData.custodianId || ''} onChange={e => setFormData({...formData, custodianId: e.target.value})}>
-                   <option value="">Select Employee...</option>
-                   {employees.filter((e: Employee) => e.status === 'Active').map((e: Employee) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
-            </div>
-            <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
-                <textarea className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none text-sm" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-            </div>
-        </div>
-        <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100">
-           <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
-           <button onClick={() => isValid && onSave(formData)} disabled={!isValid} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">Save Asset</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const MasterDataView = ({ title, data, setData, config, hiddenFields, onLog }: any) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState<any>({});
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const handleSave = () => {
-    const newItem = { ...formData, id: generateId(), ...hiddenFields };
-    setData([...data, newItem]);
-    if(onLog) onLog('Created Record', `Master Data - ${title}`, `Created ${newItem[config.fields[0].name] || 'record'}`);
-    setIsModalOpen(false);
-    setFormData({});
-  };
-
-  const filteredData = data.filter((item: any) => 
-     Object.values(item).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-         <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none w-64 focus:border-blue-500" 
-              placeholder={`Search ${title}...`}
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-         </div>
-         <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-            <Plus className="w-4 h-4" /> Add {config.title}
-         </button>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-             <tr>
-                {config.columns.map((col: any) => <th key={col.key} className="px-6 py-3">{col.label}</th>)}
-                <th className="px-6 py-3 text-right">Actions</th>
-             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-             {filteredData.map((item: any) => (
-               <tr key={item.id} className="hover:bg-slate-50">
-                  {config.columns.map((col: any) => (
-                    <td key={col.key} className="px-6 py-4">
-                      {col.render ? col.render(item[col.key]) : item[col.key]}
-                    </td>
-                  ))}
-                  <td className="px-6 py-4 text-right">
-                     <button className="text-slate-400 hover:text-blue-600 mx-1"><Pencil className="w-4 h-4" /></button>
-                     <button className="text-slate-400 hover:text-red-600 mx-1"><Trash2 className="w-4 h-4" /></button>
-                  </td>
-               </tr>
-             ))}
-          </tbody>
-        </table>
-      </div>
-      
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                 <h3 className="font-semibold text-slate-800">New {config.title}</h3>
-                 <button onClick={() => setIsModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+       </div>
+      <div className="h-72 w-full relative">
+         {chartType === 'bar' ? (
+           <div className="h-full flex items-end justify-between gap-1 pb-2">
+            {chartData.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col justify-end items-center gap-2 group h-full">
+                <div className="flex gap-1 w-full justify-center items-end flex-1 relative">
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none shadow-lg">
+                     <div className="font-bold mb-1">{d.month} {selectedYear}</div>
+                     <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#006400]"></span> In: {d.in}</div>
+                     <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-400"></span> Out: {d.out}</div>
+                  </div>
+                  <div className="w-2 md:w-4 bg-[#006400] rounded-t-sm transition-all duration-500 hover:bg-green-700 relative group/bar" style={{ height: `${(d.in / maxVal) * 100}%` }} />
+                  <div className="w-2 md:w-4 bg-yellow-400 rounded-t-sm transition-all duration-500 hover:bg-yellow-300 relative group/bar" style={{ height: `${(d.out / maxVal) * 100}%` }} />
+                </div>
+                <span className="text-[10px] text-slate-500 font-medium h-4 shrink-0">{d.month}</span>
               </div>
-              <div className="p-6 space-y-4">
-                 {config.fields.map((field: FieldConfig) => (
-                    <div key={field.name}>
-                       <label className="block text-xs font-medium text-slate-700 mb-1">{field.label} {field.required && '*'}</label>
-                       {field.type === 'select' ? (
-                          <select 
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-blue-500"
-                            value={formData[field.name] || ''}
-                            onChange={e => setFormData({...formData, [field.name]: e.target.value})}
-                          >
-                             <option value="">Select...</option>
-                             {field.options?.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                          </select>
-                       ) : (
-                          <input 
-                            type={field.type} 
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500"
-                            value={formData[field.name] || ''}
-                            onChange={e => setFormData({...formData, [field.name]: e.target.value})}
-                          />
-                       )}
-                    </div>
-                 ))}
-              </div>
-              <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3">
-                 <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
-                 <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Save Record</button>
-              </div>
+            ))}
            </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-const AuditList = ({ sessions, departments, onNew, onView }: any) => (
-   <div className="space-y-4">
-      <div className="flex justify-end">
-         <button onClick={onNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-            <Plus className="w-4 h-4" /> New Audit Session
-         </button>
-      </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-         <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-               <tr>
-                  <th className="px-6 py-3">Session ID</th>
-                  <th className="px-6 py-3">Date</th>
-                  <th className="px-6 py-3">Description</th>
-                  <th className="px-6 py-3">Department</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3 text-right">Action</th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-               {sessions.map((s: AuditSession) => (
-                  <tr key={s.id} className="hover:bg-slate-50">
-                     <td className="px-6 py-4 font-mono text-xs">{s.sessionId}</td>
-                     <td className="px-6 py-4">{formatDate(s.date)}</td>
-                     <td className="px-6 py-4">{s.description}</td>
-                     <td className="px-6 py-4">{departments.find((d: Department) => d.id === s.departmentId)?.code || 'All'}</td>
-                     <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-medium ${s.status === 'Finalized' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>{s.status}</span></td>
-                     <td className="px-6 py-4 text-right"><button onClick={() => onView(s)} className="text-blue-600 hover:text-blue-800 font-medium text-xs">View</button></td>
-                  </tr>
-               ))}
-            </tbody>
-         </table>
-      </div>
-   </div>
-);
-
-const CreateAuditModal = ({ departments, locations, onClose, onCreate }: any) => {
-   const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], departmentId: '', locationId: '', description: '' });
-   return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-         <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-               <h3 className="font-semibold text-slate-800">New Audit Session</h3>
-               <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-               <div><label className="block text-xs font-medium text-slate-700 mb-1">Date</label><input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} /></div>
-               <div><label className="block text-xs font-medium text-slate-700 mb-1">Target Department</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})}><option value="">All Departments</option>{departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-               <div><label className="block text-xs font-medium text-slate-700 mb-1">Specific Location (Optional)</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={formData.locationId} onChange={e => setFormData({...formData, locationId: e.target.value})}><option value="">All Locations</option>{locations.map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
-               <div><label className="block text-xs font-medium text-slate-700 mb-1">Description</label><input className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
-            </div>
-            <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button><button onClick={() => onCreate(formData)} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Start Session</button></div>
-         </div>
-      </div>
-   );
-};
-
-const AuditDetail = ({ session, onUpdate, onFinalize, onBack, departments }: any) => {
-   const handleCount = (itemId: string, count: number) => {
-      const updatedItems = session.items.map((item: AuditItem) => {
-         if (item.assetId === itemId) {
-            const actualQty = count;
-            const diff = actualQty - item.systemQty;
-            let status: AuditStatus = 'Matched';
-            if (diff < 0) status = 'Shortage';
-            if (diff > 0) status = 'Overage';
-            return { ...item, actualQty, shortageOverageQty: diff, shortageOverageValue: diff * item.unitValue, status };
-         }
-         return item;
-      });
-      onUpdate({ ...session, items: updatedItems });
-   };
-   
-   return (
-     <div className="space-y-6">
-        <div className="flex justify-between items-start">
-           <div>
-              <button onClick={onBack} className="text-slate-500 hover:text-blue-600 text-sm mb-2 flex items-center gap-1"><ChevronLeft size={14}/> Back to Sessions</button>
-              <h1 className="text-xl font-bold text-slate-800">{session.description}</h1>
-              <div className="text-sm text-slate-500 mt-1">{session.sessionId} • {formatDate(session.date)} • {departments.find((d: Department) => d.id === session.departmentId)?.name || 'All Departments'}</div>
-           </div>
-           {session.status === 'Draft' && (
-              <button onClick={onFinalize} className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 shadow-sm">Finalize Audit</button>
-           )}
-        </div>
-        
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-           <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-                 <tr>
-                    <th className="px-6 py-3">Property No</th>
-                    <th className="px-6 py-3">Description</th>
-                    <th className="px-6 py-3">Location / Custodian</th>
-                    <th className="px-6 py-3 text-center">System Qty</th>
-                    <th className="px-6 py-3 text-center">Actual Qty</th>
-                    <th className="px-6 py-3 text-center">Variance</th>
-                    <th className="px-6 py-3">Status</th>
-                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                 {session.items.map((item: AuditItem) => (
-                    <tr key={item.assetId} className="hover:bg-slate-50">
-                       <td className="px-6 py-4 font-mono text-xs">{item.propertyNumber}</td>
-                       <td className="px-6 py-4"><div className="font-medium text-slate-800">{item.description}</div></td>
-                       <td className="px-6 py-4"><div className="text-xs text-slate-500">{item.locationName}</div><div className="text-xs text-slate-400">{item.custodianName}</div></td>
-                       <td className="px-6 py-4 text-center">{item.systemQty}</td>
-                       <td className="px-6 py-4 text-center">
-                          {session.status === 'Draft' ? (
-                             <input type="number" min="0" className="w-16 px-2 py-1 border border-slate-300 rounded text-center text-sm" value={item.actualQty ?? ''} onChange={(e) => handleCount(item.assetId, parseInt(e.target.value) || 0)} />
-                          ) : (
-                             <span className="font-bold">{item.actualQty}</span>
-                          )}
-                       </td>
-                       <td className="px-6 py-4 text-center text-slate-500">{item.shortageOverageQty > 0 ? `+${item.shortageOverageQty}` : item.shortageOverageQty}</td>
-                       <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium 
-                             ${item.status === 'Matched' ? 'bg-emerald-100 text-emerald-700' : 
-                               item.status === 'Shortage' ? 'bg-red-100 text-red-700' : 
-                               item.status === 'Overage' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
-                             {item.status}
-                          </span>
-                       </td>
-                    </tr>
-                 ))}
-              </tbody>
-           </table>
-        </div>
-     </div>
-   );
-};
-
-const StockTransactionList = ({ transactions, departments, onNew, onView }: any) => (
-   <div className="space-y-4">
-      <div className="flex justify-end">
-         <button onClick={onNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-            <Plus className="w-4 h-4" /> New Transaction
-         </button>
-      </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-         <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-               <tr>
-                  <th className="px-6 py-3">ID</th>
-                  <th className="px-6 py-3">Date</th>
-                  <th className="px-6 py-3">Type</th>
-                  <th className="px-6 py-3">Department</th>
-                  <th className="px-6 py-3">Items</th>
-                  <th className="px-6 py-3 text-right">Action</th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-               {transactions.map((t: Transaction) => (
-                  <tr key={t.id} className="hover:bg-slate-50">
-                     <td className="px-6 py-4 font-mono text-xs">{t.transactionId}</td>
-                     <td className="px-6 py-4">{formatDate(t.date)}</td>
-                     <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.type === 'Stock In' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.type}</span>
-                     </td>
-                     <td className="px-6 py-4">{departments.find((d: Department) => d.id === t.departmentId)?.code}</td>
-                     <td className="px-6 py-4 text-slate-500">{t.items.length} items</td>
-                     <td className="px-6 py-4 text-right"><button onClick={() => onView(t)} className="text-blue-600 hover:text-blue-800 font-medium text-xs">View Details</button></td>
-                  </tr>
-               ))}
-            </tbody>
-         </table>
-      </div>
-   </div>
-);
-
-const StockTransactionDetail = ({ transaction, departments, catalog, employees, onBack }: any) => (
-   <div className="space-y-6">
-      <button onClick={onBack} className="text-slate-500 hover:text-blue-600 text-sm flex items-center gap-1"><ChevronLeft size={14}/> Back to List</button>
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-         <div className="flex justify-between items-start mb-6">
-            <div>
-               <h1 className="text-2xl font-bold text-slate-800">{transaction.transactionId}</h1>
-               <p className="text-slate-500">{transaction.type} • {formatDate(transaction.date)}</p>
-            </div>
-            <div className="text-right">
-               <div className="text-sm font-semibold text-slate-700">Department: {departments.find((d: Department) => d.id === transaction.departmentId)?.name}</div>
-               <div className="text-xs text-slate-500">Created by: {transaction.createdBy}</div>
-            </div>
-         </div>
-         
-         <table className="w-full text-left text-sm border-t border-slate-100">
-            <thead className="text-slate-500 text-xs uppercase">
-               <tr>
-                  <th className="py-3">Item</th>
-                  <th className="py-3 text-center">Quantity</th>
-                  <th className="py-3">Remarks</th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-               {transaction.items.map((item: TransactionItem) => (
-                  <tr key={item.id}>
-                     <td className="py-3 font-medium">{catalog.find((c: CatalogItem) => c.id === item.catalogItemId)?.article}</td>
-                     <td className="py-3 text-center">{item.quantity}</td>
-                     <td className="py-3 text-slate-500">{item.remarks}</td>
-                  </tr>
-               ))}
-            </tbody>
-         </table>
-         
-         {transaction.remarks && (
-            <div className="mt-6 p-4 bg-slate-50 rounded-lg text-sm text-slate-600">
-               <span className="font-bold">Notes:</span> {transaction.remarks}
+         ) : (
+            <div className="h-full w-full relative flex flex-col">
+                <div className="flex-1 w-full relative min-h-0">
+                    <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                        {[0, 25, 50, 75, 100].map(y => <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="#f1f5f9" strokeWidth="0.5" />)}
+                        <polyline fill="none" stroke="#006400" strokeWidth="1.5" points={chartData.map((d, i) => `${(i / 11) * 100},${100 - ((d.in / maxVal) * 100)}`).join(' ')} />
+                        <polyline fill="none" stroke="#FACC15" strokeWidth="1.5" points={chartData.map((d, i) => `${(i / 11) * 100},${100 - ((d.out / maxVal) * 100)}`).join(' ')} />
+                        {chartData.map((d, i) => (
+                           <g key={i} className="group">
+                              <circle cx={`${(i / 11) * 100}%`} cy={`${100 - ((d.in / maxVal) * 100)}%`} r="2" fill="#006400" className="transition-all group-hover:r-3 cursor-pointer" />
+                              <circle cx={`${(i / 11) * 100}%`} cy={`${100 - ((d.out / maxVal) * 100)}%`} r="2" fill="#FACC15" className="transition-all group-hover:r-3 cursor-pointer" />
+                           </g>
+                        ))}
+                    </svg>
+                </div>
+                <div className="flex justify-between mt-2 px-1 h-6 shrink-0">
+                   {chartData.map(d => <span key={d.month} className="text-[10px] text-slate-500 w-full text-center">{d.month}</span>)}
+                </div>
             </div>
          )}
       </div>
-   </div>
-);
-
-const AssetRegistryList = ({ assets, departments, employees, catalog, onNew, onView }: any) => (
-   <div className="space-y-4">
-      <div className="flex justify-between items-center">
-         <h2 className="text-lg font-bold text-slate-800">Asset Registry</h2>
-         <button onClick={onNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-            <Plus className="w-4 h-4" /> Register Asset
-         </button>
-      </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-         <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-               <tr>
-                  <th className="px-6 py-3">Property No</th>
-                  <th className="px-6 py-3">Article</th>
-                  <th className="px-6 py-3">Date Acquired</th>
-                  <th className="px-6 py-3">Custodian</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3 text-right">Value</th>
-                  <th className="px-6 py-3"></th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-               {assets.map((a: Asset) => (
-                  <tr key={a.id} className="hover:bg-slate-50 group cursor-pointer" onClick={() => onView(a)}>
-                     <td className="px-6 py-4 font-mono text-xs font-medium text-blue-600">{a.propertyNumber}</td>
-                     <td className="px-6 py-4 font-medium">{catalog.find((c: CatalogItem) => c.id === a.catalogItemId)?.article}</td>
-                     <td className="px-6 py-4 text-slate-500">{formatDate(a.dateAcquired)}</td>
-                     <td className="px-6 py-4">{employees.find((e: Employee) => e.id === a.custodianId)?.name || '-'}</td>
-                     <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-medium ${a.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{a.status}</span></td>
-                     <td className="px-6 py-4 text-right">{formatCurrency(a.unitValue)}</td>
-                     <td className="px-6 py-4 text-right"><ChevronRight size={16} className="text-slate-300 group-hover:text-slate-500" /></td>
-                  </tr>
-               ))}
-            </tbody>
-         </table>
-      </div>
-   </div>
-);
-
-const AssetDetail = ({ asset, catalog, employees, departments, locations, funds, onBack, onEdit, onRetire }: any) => {
-   const item = catalog.find((c: CatalogItem) => c.id === asset.catalogItemId);
-   return (
-      <div className="space-y-6">
-         <button onClick={onBack} className="text-slate-500 hover:text-blue-600 text-sm flex items-center gap-1"><ChevronLeft size={14}/> Back to Registry</button>
-         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-start">
-               <div>
-                  <h1 className="text-2xl font-bold text-slate-800">{item?.article}</h1>
-                  <p className="text-slate-500 text-sm">{asset.propertyNumber}</p>
-               </div>
-               <div className="flex gap-2">
-                  <button onClick={onEdit} className="px-4 py-2 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">Edit</button>
-                  {asset.status === 'Active' && <button onClick={onRetire} className="px-4 py-2 border border-red-200 text-red-600 bg-red-50 text-sm font-medium rounded-lg hover:bg-red-100">Retire</button>}
-               </div>
-            </div>
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-               <div>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">Asset Information</h3>
-                  <div className="space-y-3 text-sm">
-                     <div className="flex justify-between"><span className="text-slate-500">Description</span> <span className="font-medium text-right max-w-[60%]">{asset.description}</span></div>
-                     <div className="flex justify-between"><span className="text-slate-500">Unit Value</span> <span className="font-medium">{formatCurrency(asset.unitValue)}</span></div>
-                     <div className="flex justify-between"><span className="text-slate-500">Date Acquired</span> <span className="font-medium">{formatDate(asset.dateAcquired)}</span></div>
-                     <div className="flex justify-between"><span className="text-slate-500">Fund Cluster</span> <span className="font-medium">{funds.find((f: FundCluster) => f.id === asset.fundClusterId)?.code}</span></div>
-                  </div>
-               </div>
-               <div>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">Assignment & Location</h3>
-                  <div className="space-y-3 text-sm">
-                     <div className="flex justify-between"><span className="text-slate-500">Department</span> <span className="font-medium">{departments.find((d: Department) => d.id === asset.departmentId)?.name}</span></div>
-                     <div className="flex justify-between"><span className="text-slate-500">Location</span> <span className="font-medium">{locations.find((l: Location) => l.id === asset.locationId)?.name}</span></div>
-                     <div className="flex justify-between"><span className="text-slate-500">Custodian</span> <span className="font-medium">{employees.find((e: Employee) => e.id === asset.custodianId)?.name || 'Unassigned'}</span></div>
-                     <div className="flex justify-between"><span className="text-slate-500">Status</span> <span className={`font-medium ${asset.status === 'Active' ? 'text-emerald-600' : 'text-red-600'}`}>{asset.status}</span></div>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </div>
-   );
-};
-
-const MRListView = ({ mrs, employees, departments, onNew, onView }: any) => (
-   <div className="space-y-4">
-      <div className="flex justify-end">
-         <button onClick={onNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-            <Plus className="w-4 h-4" /> Issue MR
-         </button>
-      </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-         <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase border-b border-slate-200">
-               <tr>
-                  <th className="px-6 py-3">MR Number</th>
-                  <th className="px-6 py-3">Date Issued</th>
-                  <th className="px-6 py-3">Employee</th>
-                  <th className="px-6 py-3">Department</th>
-                  <th className="px-6 py-3">Items</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3"></th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-               {mrs.map((mr: MemorandumReceipt) => (
-                  <tr key={mr.id} className="hover:bg-slate-50">
-                     <td className="px-6 py-4 font-mono text-xs font-medium">{mr.mrNumber}</td>
-                     <td className="px-6 py-4">{formatDate(mr.dateIssued)}</td>
-                     <td className="px-6 py-4 font-medium">{employees.find((e: Employee) => e.id === mr.employeeId)?.name}</td>
-                     <td className="px-6 py-4">{departments.find((d: Department) => d.id === mr.departmentId)?.code}</td>
-                     <td className="px-6 py-4">{mr.items.length} items</td>
-                     <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-medium ${mr.status === 'Active' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{mr.status}</span></td>
-                     <td className="px-6 py-4 text-right"><button onClick={() => onView(mr)} className="text-blue-600 hover:text-blue-800 font-medium text-xs">View</button></td>
-                  </tr>
-               ))}
-            </tbody>
-         </table>
-      </div>
-   </div>
-);
-
-const MRForm = ({ employees, departments, assets, mrs, onSave, onCancel }: any) => {
-   const [mrNumber] = useState(`MR-${new Date().getFullYear()}-${String(mrs.length + 1).padStart(3, '0')}`);
-   const [dateIssued, setDateIssued] = useState(new Date().toISOString().split('T')[0]);
-   const [employeeId, setEmployeeId] = useState('');
-   const [selectedAssetId, setSelectedAssetId] = useState('');
-   const [items, setItems] = useState<any[]>([]);
-
-   const availableAssets = assets.filter((a: Asset) => a.status === 'Active' && !a.custodianId && !items.find(i => i.assetId === a.id));
-
-   const handleAddItem = () => {
-      const asset = assets.find((a: Asset) => a.id === selectedAssetId);
-      if (asset) {
-         setItems([...items, { assetId: asset.id, propertyNumber: asset.propertyNumber, description: asset.description, unitValue: asset.unitValue }]);
-         setSelectedAssetId('');
-      }
-   };
-
-   const handleSubmit = () => {
-      if (!employeeId || items.length === 0) return;
-      const employee = employees.find((e: Employee) => e.id === employeeId);
-      const newMR: MemorandumReceipt = {
-         id: generateId(),
-         mrNumber,
-         dateIssued,
-         employeeId,
-         departmentId: employee?.departmentId || '',
-         items,
-         status: 'Active'
-      };
-      onSave(newMR, items.map(i => i.assetId));
-   };
-
-   return (
-      <div className="max-w-3xl mx-auto">
-         <div className="flex items-center gap-2 mb-6 text-slate-500 text-sm"><button onClick={onCancel}>MR List</button> <ChevronRight size={14} /> <span className="font-medium text-slate-800">New MR</span></div>
-         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6 grid grid-cols-2 gap-6">
-            <div><label className="block text-xs font-medium text-slate-700 mb-1">MR Number</label><input disabled className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={mrNumber} /></div>
-            <div><label className="block text-xs font-medium text-slate-700 mb-1">Date Issued</label><input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={dateIssued} onChange={e => setDateIssued(e.target.value)} /></div>
-            <div className="col-span-2"><label className="block text-xs font-medium text-slate-700 mb-1">Employee</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" value={employeeId} onChange={e => setEmployeeId(e.target.value)}><option value="">Select Employee...</option>{employees.filter((e: Employee) => e.status === 'Active').map((e: Employee) => <option key={e.id} value={e.id}>{e.name} - {departments.find((d: Department) => d.id === e.departmentId)?.code}</option>)}</select></div>
-         </div>
-         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex gap-3">
-               <select className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" value={selectedAssetId} onChange={e => setSelectedAssetId(e.target.value)}><option value="">Select Asset to Issue...</option>{availableAssets.map((a: Asset) => <option key={a.id} value={a.id}>{a.propertyNumber} - {a.description}</option>)}</select>
-               <button onClick={handleAddItem} disabled={!selectedAssetId} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">Add Asset</button>
-            </div>
-            <table className="w-full text-left text-sm">
-               <thead className="text-slate-500 border-b border-slate-100"><tr><th className="px-6 py-3">Property No</th><th className="px-6 py-3">Description</th><th className="px-6 py-3 text-right">Value</th><th className="px-6 py-3"></th></tr></thead>
-               <tbody className="divide-y divide-slate-50">
-                  {items.map(item => (
-                     <tr key={item.assetId}>
-                        <td className="px-6 py-3 font-mono text-xs">{item.propertyNumber}</td>
-                        <td className="px-6 py-3">{item.description}</td>
-                        <td className="px-6 py-3 text-right">{formatCurrency(item.unitValue)}</td>
-                        <td className="px-6 py-3 text-right"><button onClick={() => setItems(items.filter(i => i.assetId !== item.assetId))} className="text-red-500 hover:bg-red-50 p-1 rounded"><X size={14}/></button></td>
-                     </tr>
-                  ))}
-                  {items.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">No assets added.</td></tr>}
-               </tbody>
-            </table>
-         </div>
-         <div className="flex justify-end gap-3 mt-6"><button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button><button onClick={handleSubmit} disabled={!employeeId || items.length === 0} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">Issue MR</button></div>
-      </div>
-   );
-};
-
-const MRDetail = ({ mr, employees, departments, onReturnItem, onBack }: any) => {
-   const employee = employees.find((e: Employee) => e.id === mr.employeeId);
-   const dept = departments.find((d: Department) => d.id === mr.departmentId);
-   return (
-      <div className="space-y-6">
-         <button onClick={onBack} className="text-slate-500 hover:text-blue-600 text-sm flex items-center gap-1"><ChevronLeft size={14}/> Back to List</button>
-         <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
-            <div className="text-center mb-8">
-               <h1 className="text-xl font-bold text-slate-800 uppercase">Memorandum Receipt for Equipment, Semi-Expendable and Non-Expendable Property</h1>
-               <p className="text-sm text-slate-500 mt-2">MR Number: {mr.mrNumber}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
-               <div><span className="text-slate-500 block mb-1">Received From:</span><div className="font-medium">Supply Office</div></div>
-               <div><span className="text-slate-500 block mb-1">Received By:</span><div className="font-medium">{employee?.name}</div><div className="text-slate-500 text-xs">{employee?.position}, {dept?.name}</div></div>
-               <div><span className="text-slate-500 block mb-1">Date Issued:</span><div className="font-medium">{formatDate(mr.dateIssued)}</div></div>
-            </div>
-            <table className="w-full text-left text-sm border border-slate-200 mb-8">
-               <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-4 py-2 border-r border-slate-200">Qty</th><th className="px-4 py-2 border-r border-slate-200">Unit</th><th className="px-4 py-2 border-r border-slate-200">Description</th><th className="px-4 py-2 border-r border-slate-200">Property No</th><th className="px-4 py-2 border-r border-slate-200">Unit Cost</th><th className="px-4 py-2">Action</th></tr></thead>
-               <tbody className="divide-y divide-slate-200">
-                  {mr.items.map((item: MRItem) => (
-                     <tr key={item.assetId}>
-                        <td className="px-4 py-2 border-r border-slate-200 text-center">1</td>
-                        <td className="px-4 py-2 border-r border-slate-200 text-center">Unit</td>
-                        <td className="px-4 py-2 border-r border-slate-200">{item.description}</td>
-                        <td className="px-4 py-2 border-r border-slate-200 font-mono text-xs">{item.propertyNumber}</td>
-                        <td className="px-4 py-2 border-r border-slate-200 text-right">{formatCurrency(item.unitValue)}</td>
-                        <td className="px-4 py-2 text-center">
-                           {item.returnDate ? (
-                              <span className="text-xs font-medium text-slate-500">Returned {formatDate(item.returnDate)}</span>
-                           ) : (
-                              <button onClick={() => onReturnItem(mr.id, item.assetId)} className="text-xs text-blue-600 hover:underline">Return</button>
-                           )}
-                        </td>
-                     </tr>
-                  ))}
-               </tbody>
-            </table>
-            <div className="text-xs text-slate-500 text-center mt-12">System Generated Document</div>
-         </div>
-      </div>
-   );
-};
-
-const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [viewState, setViewState] = useState<ViewState>('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  
-  // --- Data States ---
-  const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
-  const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
-  const [locations, setLocations] = useState<Location[]>(INITIAL_LOCATIONS);
-  const [funds, setFunds] = useState<FundCluster[]>(INITIAL_FUNDS);
-  const [categories, setCategories] = useState<AssetCategory[]>(INITIAL_CATEGORIES);
-  const [catalog, setCatalog] = useState<CatalogItem[]>(INITIAL_CATALOG);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  
-  // --- Asset Registry State ---
-  const [assets, setAssets] = useState<Asset[]>(INITIAL_ASSETS);
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-
-  // --- MR State ---
-  const [mrs, setMrs] = useState<MemorandumReceipt[]>(INITIAL_MRS);
-  const [selectedMr, setSelectedMr] = useState<MemorandumReceipt | null>(null);
-
-  // --- Audit State ---
-  const [audits, setAudits] = useState<AuditSession[]>(INITIAL_AUDITS);
-  const [selectedAudit, setSelectedAudit] = useState<AuditSession | null>(null);
-  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
-  
-  // --- Activity Log State ---
-  const [logs, setLogs] = useState<LogEntry[]>(INITIAL_LOGS);
-
-  const [showSaveNotification, setShowSaveNotification] = useState(false);
-
-  // --- Shared Logic ---
-  const triggerSave = () => {
-    setShowSaveNotification(true);
-    setTimeout(() => setShowSaveNotification(false), 3000);
-  };
-
-  const logAction = (action: string, module: string, details: string) => {
-     const newLog: LogEntry = {
-        id: generateId(),
-        timestamp: new Date().toISOString(),
-        user: 'Jeffrey Meneses',
-        role: 'Admin Officer V',
-        action,
-        module,
-        details
-     };
-     setLogs(prev => [newLog, ...prev]);
-  }
-
-  const handleSaveTransaction = (newTransaction: Transaction) => {
-    setTransactions(prev => [newTransaction, ...prev]);
-    setCatalog(prevCatalog => prevCatalog.map(item => {
-       const txItem = newTransaction.items.find(t => t.catalogItemId === item.id);
-       if (txItem) {
-           const qtyChange = newTransaction.type === 'Stock In' ? txItem.quantity : -txItem.quantity;
-           return { ...item, quantity: item.quantity + qtyChange };
-       }
-       return item;
-    }));
-    logAction('Created Transaction', 'Stock Transactions', `${newTransaction.type} - ${newTransaction.transactionId}`);
-    triggerSave();
-    setViewState('transactions-list');
-  };
-
-  const handleSaveAsset = (assetData: Partial<Asset>) => {
-    if (assetData.id) {
-      // Edit
-      setAssets(prev => prev.map(a => a.id === assetData.id ? { ...a, ...assetData } as Asset : a));
-      logAction('Updated Asset', 'Asset Registry', `Updated details for ${assetData.propertyNumber}`);
-    } else {
-      // New
-      const newAsset = { ...assetData, id: generateId() } as Asset;
-      setAssets(prev => [...prev, newAsset]);
-      logAction('Registered Asset', 'Asset Registry', `Registered new asset ${newAsset.propertyNumber}`);
-    }
-    triggerSave();
-    setViewState('asset-registry');
-  };
-
-  const handleRetireAsset = (assetId: string) => {
-    if (confirm('Are you sure you want to retire this asset? It will be marked as inactive.')) {
-      const asset = assets.find(a => a.id === assetId);
-      setAssets(prev => prev.map(a => a.id === assetId ? { ...a, status: 'Retired' } : a));
-      logAction('Retired Asset', 'Asset Registry', `Retired asset ${asset?.propertyNumber}`);
-      triggerSave();
-      setViewState('asset-registry');
-    }
-  };
-
-  // --- MR Logic ---
-  const handleSaveMR = (newMR: MemorandumReceipt, assetIds: string[]) => {
-    setMrs(prev => [newMR, ...prev]);
-    setAssets(prev => prev.map(a => {
-      if (assetIds.includes(a.id)) {
-        return { ...a, custodianId: newMR.employeeId };
-      }
-      return a;
-    }));
-    logAction('Issued MR', 'Memorandum Receipt', `Issued MR ${newMR.mrNumber} with ${newMR.items.length} items`);
-    triggerSave();
-    setViewState('mr-list');
-  };
-
-  const handleReturnItem = (mrId: string, assetId: string) => {
-    if (confirm('Mark this item as returned? This will release the asset back to the supply pool.')) {
-      const mr = mrs.find(m => m.id === mrId);
-      const item = mr?.items.find(i => i.assetId === assetId);
-      
-      setMrs(prev => prev.map(mr => {
-        if (mr.id === mrId) {
-          const updatedItems = mr.items.map(item => {
-            if (item.assetId === assetId) {
-              return { ...item, returnDate: new Date().toISOString().split('T')[0] };
-            }
-            return item;
-          });
-          const allReturned = updatedItems.every(i => !!i.returnDate);
-          return { ...mr, items: updatedItems, status: allReturned ? 'Closed' : 'Active' };
-        }
-        return mr;
-      }));
-      setAssets(prev => prev.map(a => a.id === assetId ? { ...a, custodianId: '' } : a));
-      logAction('Returned Item', 'Memorandum Receipt', `Item ${item?.propertyNumber} returned from MR ${mr?.mrNumber}`);
-      triggerSave();
-    }
-  };
-
-  // --- Audit Logic ---
-  const handleCreateAudit = ({ date, departmentId, locationId, description }: any) => {
-    const sessionItems: AuditItem[] = assets
-      .filter(a => a.status === 'Active')
-      .filter(a => !departmentId || a.departmentId === departmentId)
-      .filter(a => !locationId || a.locationId === locationId)
-      .map(a => {
-         const loc = locations.find(l => l.id === a.locationId);
-         const emp = employees.find(e => e.id === a.custodianId);
-         return {
-           assetId: a.id,
-           propertyNumber: a.propertyNumber,
-           description: a.description,
-           unitValue: a.unitValue,
-           systemQty: a.quantity,
-           actualQty: null, // Start uncounted
-           shortageOverageQty: 0,
-           shortageOverageValue: 0,
-           status: 'Uncounted',
-           locationName: loc?.name || 'Unassigned',
-           custodianName: emp?.name || 'Unassigned'
-         };
-      });
-
-    const newSession: AuditSession = {
-      id: generateId(),
-      sessionId: `PC-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`,
-      date,
-      departmentId,
-      locationId,
-      description,
-      items: sessionItems,
-      status: 'Draft',
-      createdBy: 'Admin',
-      createdAt: new Date().toISOString()
-    };
-
-    setAudits([newSession, ...audits]);
-    logAction('Created Session', 'Physical Count', `Started audit session ${newSession.sessionId}`);
-    setIsAuditModalOpen(false);
-    setSelectedAudit(newSession);
-    setViewState('audit-detail');
-    triggerSave();
-  };
-
-  const handleUpdateAudit = (updatedSession: AuditSession) => {
-     setAudits(prev => prev.map(s => s.id === updatedSession.id ? updatedSession : s));
-     setSelectedAudit(updatedSession);
-     triggerSave();
-  };
-
-  const handleFinalizeAudit = () => {
-    if (!selectedAudit) return;
-    if (confirm('Finalize this audit session? This will lock the records and cannot be undone.')) {
-       const finalized = { ...selectedAudit, status: 'Finalized' as AuditSessionStatus, finalizedAt: new Date().toISOString() };
-       handleUpdateAudit(finalized);
-       logAction('Finalized Session', 'Physical Count', `Finalized audit ${selectedAudit.sessionId}`);
-    }
-  };
-
-  const renderContent = () => {
-    switch(viewState) {
-      case 'dashboard':
-        return (
-          <DashboardView 
-             assets={assets} 
-             transactions={transactions} 
-             mrs={mrs} 
-             audits={audits}
-             catalog={catalog}
-             onNavigate={setViewState}
-          />
-        );
-      
-      case 'activity-logs':
-         return <ActivityLogView logs={logs} />;
-         
-      // --- Audit Views ---
-      case 'audit-list':
-        return (
-          <>
-            <AuditList 
-              sessions={audits} 
-              departments={departments} 
-              onNew={() => setIsAuditModalOpen(true)} 
-              onView={(s: AuditSession) => { setSelectedAudit(s); setViewState('audit-detail'); }}
-            />
-            {isAuditModalOpen && (
-              <CreateAuditModal 
-                departments={departments} 
-                locations={locations} 
-                assets={assets} 
-                onClose={() => setIsAuditModalOpen(false)} 
-                onCreate={handleCreateAudit} 
-              />
-            )}
-          </>
-        );
-      case 'audit-detail':
-        return selectedAudit ? (
-          <AuditDetail 
-             session={selectedAudit} 
-             onUpdate={handleUpdateAudit} 
-             onFinalize={handleFinalizeAudit}
-             onBack={() => setViewState('audit-list')}
-             departments={departments}
-          />
-        ) : <div/>;
-
-      case 'transactions-list':
-        return (
-          <StockTransactionList 
-            transactions={transactions} 
-            departments={departments}
-            onNew={() => setViewState('transactions-new')}
-            onView={(tx: Transaction) => { setSelectedTransaction(tx); setViewState('transactions-detail'); }}
-            setTransactions={setTransactions}
-          />
-        );
-      case 'transactions-new':
-        return (
-          <StockTransactionForm 
-            departments={departments}
-            locations={locations}
-            catalog={catalog}
-            employees={employees}
-            onCancel={() => setViewState('transactions-list')}
-            onSave={handleSaveTransaction}
-          />
-        );
-      case 'transactions-detail':
-        return selectedTransaction ? (
-          <StockTransactionDetail 
-             transaction={selectedTransaction}
-             departments={departments}
-             catalog={catalog}
-             employees={employees}
-             onBack={() => setViewState('transactions-list')}
-          />
-        ) : <div/>;
-      case 'asset-registry':
-        return (
-          <AssetRegistryList 
-            assets={assets} 
-            departments={departments}
-            employees={employees}
-            catalog={catalog}
-            onNew={() => { setSelectedAsset(null); setViewState('asset-new'); }}
-            onView={(asset: Asset) => { setSelectedAsset(asset); setViewState('asset-detail'); }}
-          />
-        );
-      case 'asset-new':
-        return (
-          <AssetForm 
-             asset={selectedAsset}
-             catalog={catalog}
-             employees={employees}
-             departments={departments}
-             locations={locations}
-             funds={funds}
-             onSave={handleSaveAsset}
-             onCancel={() => setViewState('asset-registry')}
-          />
-        );
-      case 'asset-detail':
-        return selectedAsset ? (
-          <AssetDetail 
-            asset={selectedAsset}
-            catalog={catalog}
-            employees={employees}
-            departments={departments}
-            locations={locations}
-            funds={funds}
-            onBack={() => setViewState('asset-registry')}
-            onEdit={() => { setViewState('asset-new'); }}
-            onRetire={() => handleRetireAsset(selectedAsset.id)}
-          />
-        ) : <div/>;
-      case 'mr-list':
-        return (
-          <MRListView 
-            mrs={mrs} 
-            employees={employees} 
-            departments={departments} 
-            onNew={() => setViewState('mr-new')} 
-            onView={(mr: MemorandumReceipt) => { setSelectedMr(mr); setViewState('mr-detail'); }} 
-          />
-        );
-      case 'mr-new':
-        return (
-          <MRForm 
-            employees={employees}
-            departments={departments}
-            assets={assets}
-            mrs={mrs}
-            onSave={handleSaveMR}
-            onCancel={() => setViewState('mr-list')}
-          />
-        );
-      case 'mr-detail':
-        return selectedMr ? (
-          <MRDetail 
-            mr={selectedMr}
-            employees={employees}
-            departments={departments}
-            onReturnItem={handleReturnItem}
-            onBack={() => setViewState('mr-list')}
-          />
-        ) : <div/>;
-      case 'reports':
-         return (
-            <ReportsModule 
-               assets={assets} 
-               departments={departments} 
-               locations={locations} 
-               categories={categories} 
-               catalog={catalog} 
-               transactions={transactions} 
-               audits={audits} 
-            />
-         );
-      case 'mdm-departments':
-        return (
-          <MasterDataView 
-            title="Departments" 
-            data={departments} 
-            setData={setDepartments}
-            onLog={logAction}
-            config={{
-              title: 'Department',
-              fields: [
-                { name: 'code', label: 'Code', type: 'text', required: true },
-                { name: 'name', label: 'Department Name', type: 'text', required: true },
-                { name: 'status', label: 'Status', type: 'select', options: [{label: 'Active', value: 'Active'}, {label: 'Inactive', value: 'Inactive'}], required: true }
-              ],
-              columns: [
-                { key: 'code', label: 'Code' },
-                { key: 'name', label: 'Name' },
-              ]
-            }}
-          />
-        );
-      case 'mdm-employees':
-        return (
-           <MasterDataView 
-              title="Employees" 
-              data={employees} 
-              setData={setEmployees} 
-              onLog={logAction} 
-              config={{ 
-                 title: 'Employee', 
-                 fields: [
-                    {name: 'name', label: 'Name', type: 'text', required: true},
-                    {name: 'employeeId', label: 'Employee ID', type: 'text', required: true},
-                    {name: 'position', label: 'Position', type: 'text'},
-                    {name: 'departmentId', label: 'Department', type: 'select', options: departments.map((d: Department) => ({label: d.name, value: d.id})), required: true},
-                    {name: 'status', label: 'Status', type: 'select', options: [{label: 'Active', value: 'Active'}, {label: 'Inactive', value: 'Inactive'}]}
-                 ], 
-                 columns: [
-                    {key: 'employeeId', label: 'ID'}, 
-                    {key: 'name', label: 'Name'},
-                    {key: 'departmentId', label: 'Department', render: (val: string) => departments.find((d: Department) => d.id === val)?.code}
-                 ] 
-              }} 
-           />
-        );
-      case 'mdm-locations':
-        return <MasterDataView title="Locations" data={locations} setData={setLocations} onLog={logAction} config={{ title: 'Location', fields: [{name: 'name', label: 'Name', type: 'text'}, {name: 'building', label: 'Building', type: 'text'}], columns: [{key: 'name', label: 'Name'}, {key: 'building', label: 'Building'}] }} />
-      case 'mdm-funds':
-         return <MasterDataView title="Fund Clusters" data={funds} setData={setFunds} onLog={logAction} config={{ title: 'Fund Cluster', fields: [{name: 'code', label: 'Code', type: 'text'}, {name: 'description', label: 'Description', type: 'text'}], columns: [{key: 'code', label: 'Code'}, {key: 'description', label: 'Description'}] }} />
-      case 'mdm-categories':
-         return <MasterDataView title="Asset Categories" data={categories} setData={setCategories} onLog={logAction} config={{ title: 'Category', fields: [{name: 'name', label: 'Name', type: 'text'}, {name: 'code', label: 'Code', type: 'text'}], columns: [{key: 'name', label: 'Name'}, {key: 'type', label: 'Type'}] }} />
-      case 'mdm-ppe':
-         return (
-           <PPECatalogView 
-              catalog={catalog} 
-              setCatalog={setCatalog} 
-              categories={categories} 
-              funds={funds}
-              onLog={logAction}
-           />
-         );
-      case 'mdm-consumables':
-         return (
-           <ConsumablesCatalogView
-              catalog={catalog} 
-              setCatalog={setCatalog} 
-              categories={categories} 
-              funds={funds}
-              onLog={logAction}
-           />
-         );
-
-      default:
-        return (
-           <DashboardView 
-             assets={assets} 
-             transactions={transactions} 
-             mrs={mrs} 
-             audits={audits}
-             catalog={catalog}
-             onNavigate={setViewState}
-          />
-        );
-    }
-  };
-
-  // --- Auth Check ---
-  if (!isAuthenticated) {
-     return <LandingPage onLogin={() => setIsAuthenticated(true)} />;
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900">
-      
-      {/* Sidebar */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-slate-900 text-white transition-all duration-300 flex flex-col fixed h-full z-20 overflow-y-auto no-print`}>
-        <div className="h-16 flex items-center justify-center border-b border-slate-800 shrink-0">
-          {isSidebarOpen ? (
-            <div className="font-bold text-xl tracking-tight">ESSU <span className="text-blue-400">Supply</span></div>
-          ) : (
-            <div className="font-bold text-xl">ES</div>
-          )}
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-1">
-          <NavSection label="Main" collapsed={!isSidebarOpen}>
-            <NavItem 
-              icon={<LayoutDashboard />} 
-              label="Dashboard" 
-              active={viewState === 'dashboard'} 
-              onClick={() => setViewState('dashboard')} 
-              collapsed={!isSidebarOpen} 
-            />
-            <NavItem 
-              icon={<Monitor />} 
-              label="Asset Registry" 
-              active={viewState.startsWith('asset')} 
-              onClick={() => setViewState('asset-registry')} 
-              collapsed={!isSidebarOpen} 
-            />
-             <NavItem 
-              icon={<ClipboardList />} 
-              label="Memorandum Receipt" 
-              active={viewState.startsWith('mr')} 
-              onClick={() => setViewState('mr-list')} 
-              collapsed={!isSidebarOpen} 
-            />
-            <NavItem 
-              icon={<ArrowRightLeft />} 
-              label="Stock Transactions" 
-              active={viewState.startsWith('transactions')} 
-              onClick={() => setViewState('transactions-list')} 
-              collapsed={!isSidebarOpen} 
-            />
-            <NavItem 
-              icon={<PackageSearch />} 
-              label="Physical Count" 
-              active={viewState.startsWith('audit')} 
-              onClick={() => setViewState('audit-list')} 
-              collapsed={!isSidebarOpen} 
-            />
-             <NavItem 
-              icon={<FileText />} 
-              label="Reports" 
-              active={viewState === 'reports'} 
-              onClick={() => setViewState('reports')} 
-              collapsed={!isSidebarOpen} 
-            />
-          </NavSection>
-
-          <NavSection label="Master Data" collapsed={!isSidebarOpen}>
-            <NavItem icon={<Database />} label="Departments" active={viewState === 'mdm-departments'} onClick={() => setViewState('mdm-departments')} collapsed={!isSidebarOpen} />
-            <NavItem icon={<Users />} label="Employees" active={viewState === 'mdm-employees'} onClick={() => setViewState('mdm-employees')} collapsed={!isSidebarOpen} />
-            <NavItem icon={<MapPin />} label="Locations" active={viewState === 'mdm-locations'} onClick={() => setViewState('mdm-locations')} collapsed={!isSidebarOpen} />
-            <NavItem icon={<Wallet />} label="Fund Clusters" active={viewState === 'mdm-funds'} onClick={() => setViewState('mdm-funds')} collapsed={!isSidebarOpen} />
-            <NavItem icon={<Tags />} label="Asset Categories" active={viewState === 'mdm-categories'} onClick={() => setViewState('mdm-categories')} collapsed={!isSidebarOpen} />
-            <NavItem icon={<Box />} label="PPE Catalog" active={viewState === 'mdm-ppe'} onClick={() => setViewState('mdm-ppe')} collapsed={!isSidebarOpen} />
-            <NavItem icon={<Archive />} label="Consumables" active={viewState === 'mdm-consumables'} onClick={() => setViewState('mdm-consumables')} collapsed={!isSidebarOpen} />
-          </NavSection>
-          
-          <NavSection label="System" collapsed={!isSidebarOpen}>
-             <NavItem icon={<History />} label="Activity Logs" active={viewState === 'activity-logs'} onClick={() => setViewState('activity-logs')} collapsed={!isSidebarOpen} />
-             <NavItem icon={<Settings />} label="Settings" active={viewState === 'settings'} onClick={() => setViewState('settings')} collapsed={!isSidebarOpen} />
-          </NavSection>
-        </nav>
-
-        <div className="p-4 border-t border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold">JM</div>
-            {isSidebarOpen && (
-              <div className="overflow-hidden">
-                <div className="text-sm font-medium truncate">Jeffrey Meneses</div>
-                <div className="text-xs text-slate-400 truncate">Admin Officer V</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-        
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-10 px-6 flex items-center justify-between shadow-sm no-print">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600">
-              <Menu className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-lg font-semibold text-slate-800">
-                {viewState === 'dashboard' && 'Supply Office Dashboard'}
-                {viewState === 'audit-list' && 'Physical Count Sessions'}
-                {viewState === 'audit-detail' && 'Audit Worksheet'}
-                {viewState.startsWith('mdm') && 'Master Data Management'}
-                {viewState === 'transactions-list' && 'Stock Transactions'}
-                {viewState === 'transactions-new' && 'New Stock Transaction'}
-                {viewState === 'transactions-detail' && 'Transaction Details'}
-                {viewState === 'asset-registry' && 'Asset Registry'}
-                {viewState === 'asset-new' && 'Asset Registration'}
-                {viewState === 'asset-detail' && 'Asset Details'}
-                {viewState === 'mr-list' && 'Memorandum Receipts'}
-                {viewState === 'mr-new' && 'New Memorandum Receipt'}
-                {viewState === 'mr-detail' && 'MR Details'}
-                {viewState === 'reports' && 'Generated Reports'}
-                {viewState === 'activity-logs' && 'System Activity Logs'}
-                {viewState === 'settings' && 'System Settings'}
-              </h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-slate-100 rounded-full text-slate-500 relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
-          </div>
-        </header>
-
-        <div className="p-6">
-           {renderContent()}
-        </div>
-      </main>
-
-      {/* Notification Toast */}
-      {showSaveNotification && (
-        <div className="fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 z-50 no-print">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-          <div>
-            <p className="font-medium text-sm">Operation Successful</p>
-            <p className="text-xs text-slate-400">System updated at {new Date().toLocaleTimeString()}</p>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };
+
+// --- Reports Module ---
+const ReportsModule = ({ assets, catalog, transactions, audits, departments, locations, categories }: any) => {
+    const [activeTab, setActiveTab] = useState<'ppe' | 'consumables' | 'movement' | 'audit'>('ppe');
+    const [filters, setFilters] = useState({
+        startDate: '',
+        endDate: '',
+        department: 'All',
+        category: 'All',
+        status: 'Active'
+    });
+
+    const filteredPPE = useMemo(() => {
+        return assets.filter((a: Asset) => {
+            const matchesStatus = filters.status === 'All' ? true : a.status === filters.status;
+            // Add more filters as needed
+            return matchesStatus;
+        });
+    }, [assets, filters]);
+
+    const stockMovementData = useMemo(() => {
+        return transactions.flatMap((t: Transaction) => 
+            t.items.map(item => ({
+                id: item.id,
+                date: t.date,
+                type: t.type,
+                transactionId: t.transactionId,
+                department: departments.find((d: Department) => d.id === t.departmentId)?.name || 'Unknown',
+                itemName: catalog.find((c: CatalogItem) => c.id === item.catalogItemId)?.article || 'Unknown Item',
+                quantity: item.quantity,
+                remarks: item.remarks
+            }))
+        ).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [transactions, departments, catalog]);
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center print:hidden">
+                <h1 className="text-2xl font-bold text-slate-800">Reports Center</h1>
+                <button onClick={() => window.print()} className="px-4 py-2 bg-slate-800 text-white rounded-lg flex items-center gap-2 hover:bg-slate-700">
+                    <Printer size={16} /> Print Report
+                </button>
+            </div>
+
+            <div className="flex gap-2 border-b border-slate-200 print:hidden overflow-x-auto">
+                <button onClick={() => setActiveTab('ppe')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'ppe' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>PPE Inventory</button>
+                <button onClick={() => setActiveTab('consumables')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'consumables' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Consumables Stock</button>
+                <button onClick={() => setActiveTab('movement')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'movement' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Stock Movement</button>
+                <button onClick={() => setActiveTab('audit')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'audit' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Audit Findings</button>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm print:border-none print:shadow-none">
+                <ESSUHeader />
+                
+                {activeTab === 'ppe' && (
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-bold text-slate-800">Report on the Physical Count of Property, Plant and Equipment</h2>
+                            <div className="text-sm text-slate-500 print:hidden">Showing {filteredPPE.length} assets</div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left border border-slate-300">
+                                <thead className="bg-slate-100 text-slate-800 font-semibold">
+                                    <tr>
+                                        <th className="px-3 py-2 border border-slate-300">Property No.</th>
+                                        <th className="px-3 py-2 border border-slate-300">Article / Description</th>
+                                        <th className="px-3 py-2 border border-slate-300">Date Acquired</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-right">Unit Value</th>
+                                        <th className="px-3 py-2 border border-slate-300">Location</th>
+                                        <th className="px-3 py-2 border border-slate-300">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredPPE.map((a: Asset) => (
+                                        <tr key={a.id}>
+                                            <td className="px-3 py-2 border border-slate-300 font-medium">{a.propertyNumber}</td>
+                                            <td className="px-3 py-2 border border-slate-300">
+                                                <div className="font-medium">{catalog.find((c:any) => c.id === a.catalogItemId)?.article}</div>
+                                                <div className="text-xs text-slate-500">{a.description}</div>
+                                            </td>
+                                            <td className="px-3 py-2 border border-slate-300">{formatDate(a.dateAcquired)}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency(a.unitValue)}</td>
+                                            <td className="px-3 py-2 border border-slate-300">{locations.find((l:Location) => l.id === a.locationId)?.name}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-center">{a.status}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'consumables' && (
+                    <div className="space-y-4">
+                        <h2 className="text-lg font-bold text-slate-800">Inventory of Supplies and Materials</h2>
+                        <table className="w-full text-sm text-left border border-slate-300">
+                            <thead className="bg-slate-100 text-slate-800 font-semibold">
+                                <tr>
+                                    <th className="px-3 py-2 border border-slate-300">Stock No.</th>
+                                    <th className="px-3 py-2 border border-slate-300">Item</th>
+                                    <th className="px-3 py-2 border border-slate-300">Unit</th>
+                                    <th className="px-3 py-2 border border-slate-300 text-center">Stock on Hand</th>
+                                    <th className="px-3 py-2 border border-slate-300 text-right">Unit Cost</th>
+                                    <th className="px-3 py-2 border border-slate-300 text-right">Total Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {catalog.filter((c: CatalogItem) => c.itemType === 'Consumable').map((c: CatalogItem) => (
+                                    <tr key={c.id}>
+                                        <td className="px-3 py-2 border border-slate-300 font-medium">{c.stockNumber}</td>
+                                        <td className="px-3 py-2 border border-slate-300">
+                                            <div>{c.article}</div>
+                                            <div className="text-xs text-slate-500">{c.description}</div>
+                                        </td>
+                                        <td className="px-3 py-2 border border-slate-300">{c.unit}</td>
+                                        <td className="px-3 py-2 border border-slate-300 text-center font-bold">{c.quantity}</td>
+                                        <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency(c.unitValue || 0)}</td>
+                                        <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency((c.unitValue || 0) * c.quantity)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {activeTab === 'movement' && (
+                    <div className="space-y-4">
+                        <h2 className="text-lg font-bold text-slate-800">Stock Movement Report</h2>
+                        <table className="w-full text-sm text-left border border-slate-300">
+                            <thead className="bg-slate-100 text-slate-800 font-semibold">
+                                <tr>
+                                    <th className="px-3 py-2 border border-slate-300">Date</th>
+                                    <th className="px-3 py-2 border border-slate-300">Transaction ID</th>
+                                    <th className="px-3 py-2 border border-slate-300">Type</th>
+                                    <th className="px-3 py-2 border border-slate-300">Item</th>
+                                    <th className="px-3 py-2 border border-slate-300">Department/Source</th>
+                                    <th className="px-3 py-2 border border-slate-300 text-right">Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {stockMovementData.map((row: any) => (
+                                    <tr key={row.id}>
+                                        <td className="px-3 py-2 border border-slate-300">{formatDate(row.date)}</td>
+                                        <td className="px-3 py-2 border border-slate-300 font-medium">{row.transactionId}</td>
+                                        <td className="px-3 py-2 border border-slate-300">
+                                            <span className={`text-xs font-bold ${row.type === 'Stock In' ? 'text-green-700' : 'text-amber-700'}`}>{row.type.toUpperCase()}</span>
+                                        </td>
+                                        <td className="px-3 py-2 border border-slate-300">{row.itemName}</td>
+                                        <td className="px-3 py-2 border border-slate-300">{row.department}</td>
+                                        <td className="px-3 py-2 border border-slate-300 text-right font-bold">{row.quantity}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {activeTab === 'audit' && (
+                    <div className="space-y-4">
+                        <h2 className="text-lg font-bold text-slate-800">Audit & Physical Count Findings</h2>
+                        <table className="w-full text-sm text-left border border-slate-300">
+                            <thead className="bg-slate-100 text-slate-800 font-semibold">
+                                <tr>
+                                    <th className="px-3 py-2 border border-slate-300">Session ID</th>
+                                    <th className="px-3 py-2 border border-slate-300">Date</th>
+                                    <th className="px-3 py-2 border border-slate-300">Scope</th>
+                                    <th className="px-3 py-2 border border-slate-300 text-center">Items Counted</th>
+                                    <th className="px-3 py-2 border border-slate-300 text-center text-red-600">Shortages</th>
+                                    <th className="px-3 py-2 border border-slate-300 text-right text-red-600">Total Shortage Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {audits.map((a: AuditSession) => {
+                                    const shortageCount = a.items.filter(i => i.status === 'Shortage').length;
+                                    const shortageVal = a.items.reduce((sum, i) => sum + (i.shortageOverageValue < 0 ? Math.abs(i.shortageOverageValue) : 0), 0);
+                                    
+                                    return (
+                                        <tr key={a.id}>
+                                            <td className="px-3 py-2 border border-slate-300 font-medium">{a.sessionId}</td>
+                                            <td className="px-3 py-2 border border-slate-300">{formatDate(a.date)}</td>
+                                            <td className="px-3 py-2 border border-slate-300">{a.description}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-center">{a.items.length}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-center font-bold text-red-600">{shortageCount}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-right font-bold text-red-600">{formatCurrency(shortageVal)}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- Settings Module ---
+const SettingsView = ({ settings, setSettings, onLog }: any) => {
+    const handleChange = (section: string, field: string, value: any) => {
+        setSettings((prev: any) => ({
+            ...prev,
+            [section]: {
+                ...prev[section],
+                [field]: value
+            }
+        }));
+        if (onLog) onLog('Updated Settings', 'Settings', `Updated ${section}.${field}`);
+    };
+
+    return (
+        <div className="space-y-6">
+            <h1 className="text-2xl font-bold text-slate-800">System Settings</h1>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* General Settings */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                        <Monitor className="text-[#006400]" />
+                        <h3 className="font-bold text-slate-800">General Configuration</h3>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">System Name</label>
+                        <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                            value={settings.general.systemName} 
+                            onChange={(e) => handleChange('general', 'systemName', e.target.value)} 
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Footer Text</label>
+                        <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                            value={settings.general.footerText}
+                            onChange={(e) => handleChange('general', 'footerText', e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                {/* Inventory Rules */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                        <Box className="text-[#006400]" />
+                        <h3 className="font-bold text-slate-800">Inventory Rules</h3>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Default Low Stock Threshold</label>
+                        <input type="number" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                            value={settings.inventory.defaultReorderThreshold}
+                            onChange={(e) => handleChange('inventory', 'defaultReorderThreshold', parseInt(e.target.value))}
+                        />
+                    </div>
+                    <div className="flex items-center justify-between">
+                         <span className="text-sm font-medium text-slate-700">Enable Partial Audit Saving</span>
+                         <button onClick={() => handleChange('inventory', 'enablePartialPhysicalCount', !settings.inventory.enablePartialPhysicalCount)} className="text-[#006400]">
+                            {settings.inventory.enablePartialPhysicalCount ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Document & Printing */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                        <FileText className="text-[#006400]" />
+                        <h3 className="font-bold text-slate-800">Document Defaults</h3>
+                    </div>
+                    <div className="flex items-center justify-between mb-4">
+                         <span className="text-sm font-medium text-slate-700">Include ESSU Logo on PDF</span>
+                         <button onClick={() => handleChange('documents', 'includeLogoInPDF', !settings.documents.includeLogoInPDF)} className="text-[#006400]">
+                            {settings.documents.includeLogoInPDF ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Prepared By (Default)</label>
+                            <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                                value={settings.documents.preparedBy}
+                                onChange={(e) => handleChange('documents', 'preparedBy', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Received By (Default)</label>
+                            <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                                value={settings.documents.receivedBy}
+                                onChange={(e) => handleChange('documents', 'receivedBy', e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Maintenance */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                        <Database className="text-[#006400]" />
+                        <h3 className="font-bold text-slate-800">System Maintenance</h3>
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-lg text-sm text-slate-600 mb-4">
+                        Manage system data and backups.
+                    </div>
+                    <div className="flex gap-4">
+                        <button className="flex-1 px-4 py-2 border border-slate-300 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-50 text-slate-700" onClick={() => alert('Download started...')}>
+                            <Download size={16} /> Export DB
+                        </button>
+                        <button className="flex-1 px-4 py-2 border border-red-200 bg-red-50 rounded-lg flex items-center justify-center gap-2 hover:bg-red-100 text-red-600" onClick={() => alert('Reset function is disabled in prototype.')}>
+                            <RefreshCw size={16} /> Reset Demo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Landing/Login Page Component ---
+const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    setTimeout(() => {
+      if (username === 'admin' && password === 'password') {
+        onLogin();
+      } else {
+        setError('Invalid username or password. Try admin / password');
+        setIsLoading(false);
+      }
+    }, 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-green-50/50 flex items-center justify-center font-sans">
+      <div className="w-full max-w-5xl h-[600px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-100 animate-in fade-in zoom-in duration-500 mx-4">
+        <div className="w-full md:w-1/2 bg-[#006400] text-white p-12 flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full opacity-10">
+             <div className="absolute right-0 top-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
+             <div className="absolute left-0 bottom-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl transform -translate-x-1/2 translate-y-1/2"></div>
+          </div>
+          <div className="relative z-10">
+            <div className="w-16 h-16 bg-white/10 rounded-xl mb-6 flex items-center justify-center backdrop-blur-sm border border-white/20 shadow-lg">
+               <ShieldCheck className="w-8 h-8 text-yellow-400" />
+            </div>
+            <h1 className="text-3xl font-bold mb-2">ESSU Inventory</h1>
+            <p className="text-green-100 text-sm opacity-90 leading-relaxed">Property, Plant, and Equipment (PPE) Management and Audit System</p>
+          </div>
+          <div className="relative z-10 space-y-4">
+             <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Real-time Stock Tracking</span></div>
+             <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Digital Audit Workflows</span></div>
+             <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Asset Lifecycle Management</span></div>
+          </div>
+          <div className="relative z-10 text-xs text-green-200/60 mt-8">&copy; 2025 Eastern Samar State University</div>
+        </div>
+        <div className="w-full md:w-1/2 p-12 bg-white flex flex-col justify-center">
+           <div className="max-w-sm mx-auto w-full">
+              <h2 className="text-2xl font-bold text-[#006400] mb-1">Welcome Back</h2>
+              <p className="text-slate-500 text-sm mb-8">Please enter your credentials to access the system.</p>
+              {error && <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-sm text-red-600 animate-in slide-in-from-top-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
+              <form onSubmit={handleLogin} className="space-y-5">
+                 <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Username</label>
+                    <div className="relative">
+                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                       <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] focus:ring-1 focus:ring-[#006400] transition-all" placeholder="Enter your username" disabled={isLoading} />
+                    </div>
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Password</label>
+                    <div className="relative">
+                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                       <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] focus:ring-1 focus:ring-[#006400] transition-all" placeholder="••••••••" disabled={isLoading} />
+                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#006400]">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                    </div>
+                 </div>
+                 <button type="submit" disabled={isLoading} className="w-full bg-[#006400] hover:bg-[#004d00] text-white font-semibold py-2.5 rounded-lg shadow-lg shadow-green-900/10 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2">
+                    {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Authenticating...</span></> : <span>Sign In</span>}
+                 </button>
+              </form>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Activity Logs ---
+const ActivityLogView = ({ logs, setLogs }: any) => {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-2xl font-bold text-slate-800">Activity Logs</h1>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Timestamp</th>
+                            <th className="px-6 py-4">User</th>
+                            <th className="px-6 py-4">Action</th>
+                            <th className="px-6 py-4">Module</th>
+                            <th className="px-6 py-4">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {logs.map((log: LogEntry) => (
+                            <tr key={log.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-3 text-slate-500">{formatDateTime(log.timestamp)}</td>
+                                <td className="px-6 py-3 font-medium text-slate-800">{log.username}</td>
+                                <td className="px-6 py-3"><span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">{log.action}</span></td>
+                                <td className="px-6 py-3 text-slate-600">{log.module}</td>
+                                <td className="px-6 py-3 text-slate-600">{log.description}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+// --- Asset Registry Modules ---
+const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog, employees, onNavigate, onLog }: any) => {
+    const [filterStatus, setFilterStatus] = useState('All');
+    const [filterDept, setFilterDept] = useState('All');
+    const [filterLoc, setFilterLoc] = useState('All');
+    const [filterYear, setFilterYear] = useState('All');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const availableYears = useMemo(() => {
+        const years = new Set(assets.map((a: Asset) => new Date(a.dateAcquired).getFullYear()));
+        return Array.from(years).sort((a: any, b: any) => b - a);
+    }, [assets]);
+
+    const filteredAssets = useMemo(() => {
+        return assets.filter((a: Asset) => {
+            const matchesStatus = filterStatus === 'All' || a.status === filterStatus;
+            const matchesDept = filterDept === 'All' || a.departmentId === filterDept;
+            const matchesLoc = filterLoc === 'All' || a.locationId === filterLoc;
+            const matchesYear = filterYear === 'All' || new Date(a.dateAcquired).getFullYear().toString() === filterYear.toString();
+            
+            const item = catalog.find((c: CatalogItem) => c.id === a.catalogItemId);
+            const itemName = item ? item.article.toLowerCase() : '';
+            const propNo = a.propertyNumber.toLowerCase();
+            const matchesSearch = itemName.includes(searchTerm.toLowerCase()) || propNo.includes(searchTerm.toLowerCase());
+
+            return matchesStatus && matchesDept && matchesLoc && matchesYear && matchesSearch;
+        });
+    }, [assets, filterStatus, filterDept, filterLoc, filterYear, searchTerm, catalog]);
+
+    const handleEdit = (asset: Asset) => {
+        onNavigate('asset-edit', asset);
+    };
+
+    const handleDelete = (id: string) => {
+        if(confirm('Are you sure you want to delete/archive this asset?')) {
+            const updated = assets.map((a: Asset) => a.id === id ? { ...a, status: 'Archived', updatedAt: new Date().toISOString() } : a);
+            setAssets(updated);
+            if (onLog) onLog('Archived Asset', 'Asset Registry', `Archived asset ID: ${id}`, id);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h1 className="text-2xl font-bold text-slate-800">Asset Registry</h1>
+                <button onClick={() => onNavigate('asset-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
+                    <Plus size={16} /> Register Asset
+                </button>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
+                <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search Property No or Item Name..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                    <option value="All">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="Under Repair">Under Repair</option>
+                    <option value="Missing">Missing</option>
+                    <option value="Retired">Retired</option>
+                </select>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
+                    <option value="All">All Departments</option>
+                    {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.code}</option>)}
+                </select>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterLoc} onChange={e => setFilterLoc(e.target.value)}>
+                    <option value="All">All Locations</option>
+                    {locations.map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]" value={filterYear} onChange={e => setFilterYear(e.target.value)}>
+                    <option value="All">All Years</option>
+                    {availableYears.map((y: any) => <option key={y} value={y}>{y}</option>)}
+                </select>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Property No.</th>
+                            <th className="px-6 py-4">Item Name</th>
+                            <th className="px-6 py-4">Custodian</th>
+                            <th className="px-6 py-4">Location</th>
+                            <th className="px-6 py-4">Date Acquired</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredAssets.map((asset: Asset) => {
+                            const item = catalog.find((c: CatalogItem) => c.id === asset.catalogItemId);
+                            const custodian = employees.find((e: Employee) => e.id === asset.custodianId);
+                            const location = locations.find((l: Location) => l.id === asset.locationId);
+                            
+                            return (
+                                <tr key={asset.id} className="hover:bg-slate-50">
+                                    <td className="px-6 py-3 font-medium text-[#006400]">{asset.propertyNumber}</td>
+                                    <td className="px-6 py-3">
+                                        <div className="font-medium text-slate-800">{item ? item.article : 'Unknown Item'}</div>
+                                        <div className="text-xs text-slate-500 truncate max-w-[200px]">{asset.description}</div>
+                                    </td>
+                                    <td className="px-6 py-3 text-slate-600">{getEmployeeFullName(custodian)}</td>
+                                    <td className="px-6 py-3 text-slate-600">{location ? location.name : '-'}</td>
+                                    <td className="px-6 py-3 text-slate-500">{formatDate(asset.dateAcquired)}</td>
+                                    <td className="px-6 py-3">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium 
+                                            ${asset.status === 'Active' ? 'bg-green-100 text-[#006400]' : 
+                                              asset.status === 'Missing' ? 'bg-red-100 text-red-700' : 
+                                              'bg-slate-100 text-slate-600'}`}>
+                                            {asset.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-3 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => onNavigate('asset-detail')} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Details"><Eye size={16} /></button>
+                                            <button onClick={() => handleEdit(asset)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Pencil size={16} /></button>
+                                            <button onClick={() => handleDelete(asset.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded" title="Delete"><Trash2 size={16} /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {filteredAssets.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-6 py-8 text-center text-slate-400">No assets found matching your criteria.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, locations, funds, initialData }: any) => {
+    const [formData, setFormData] = useState({
+        propertyNumber: '',
+        dateAcquired: '',
+        catalogItemId: '',
+        description: '',
+        unitValue: '',
+        fundClusterId: '',
+        departmentId: '',
+        locationId: '',
+        custodianId: '',
+        status: 'Active'
+    });
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (initialData) {
+            setFormData({
+                propertyNumber: initialData.propertyNumber,
+                dateAcquired: initialData.dateAcquired,
+                catalogItemId: initialData.catalogItemId,
+                description: initialData.description,
+                unitValue: initialData.unitValue.toString(),
+                fundClusterId: initialData.fundClusterId,
+                departmentId: initialData.departmentId,
+                locationId: initialData.locationId,
+                custodianId: initialData.custodianId,
+                status: initialData.status
+            });
+        }
+    }, [initialData]);
+
+    const handleCatalogChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const itemId = e.target.value;
+        const item = catalog.find((c: CatalogItem) => c.id === itemId);
+        
+        setFormData(prev => ({
+            ...prev,
+            catalogItemId: itemId,
+            // Auto-fill description and unit value if available, but allow user override later
+            description: item ? item.description : prev.description,
+            unitValue: item && item.unitValue ? item.unitValue.toString() : prev.unitValue
+        }));
+    };
+
+    const handleSaveAction = () => {
+        // Validation
+        if (!formData.propertyNumber || !formData.dateAcquired || !formData.catalogItemId || 
+            !formData.unitValue || !formData.fundClusterId || !formData.departmentId || 
+            !formData.locationId || !formData.custodianId) {
+            setError('All fields are required.');
+            return;
+        }
+
+        // Unique Property Number Check
+        const isDuplicate = assets.some((a: Asset) => 
+            a.propertyNumber === formData.propertyNumber && 
+            (!initialData || a.id !== initialData.id)
+        );
+
+        if (isDuplicate) {
+            setError('Property Number must be unique.');
+            return;
+        }
+
+        const assetData = {
+            ...formData,
+            unitValue: parseFloat(formData.unitValue)
+        };
+        
+        onSave(assetData);
+    };
+
+    return (
+        <div className="max-w-3xl mx-auto space-y-6">
+            <div className="flex items-center gap-4 mb-6">
+                <button onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={20} /></button>
+                <h1 className="text-2xl font-bold text-slate-800">{initialData ? 'Edit Asset' : 'Register New Asset'}</h1>
+            </div>
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Property Number <span className="text-red-500">*</span></label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                            placeholder="e.g. 16-09-001" 
+                            value={formData.propertyNumber}
+                            onChange={e => setFormData({...formData, propertyNumber: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Date Acquired <span className="text-red-500">*</span></label>
+                        <input 
+                            type="date" 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                            value={formData.dateAcquired}
+                            onChange={e => setFormData({...formData, dateAcquired: e.target.value})}
+                        />
+                    </div>
+                </div>
+                <div>
+                     <label className="block text-sm font-medium text-slate-700 mb-1">Article (PPE Item) <span className="text-red-500">*</span></label>
+                     <select 
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                        value={formData.catalogItemId}
+                        onChange={handleCatalogChange}
+                     >
+                         <option value="">Select Item...</option>
+                         {catalog.filter((c: CatalogItem) => c.itemType === 'PPE').map((c: CatalogItem) => (
+                             <option key={c.id} value={c.id}>{c.article}</option>
+                         ))}
+                     </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Description <span className="text-red-500">*</span></label>
+                    <textarea 
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                        rows={3} 
+                        placeholder="Specific details (Serial No, Model, etc)"
+                        value={formData.description}
+                        onChange={e => setFormData({...formData, description: e.target.value})}
+                    ></textarea>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Unit Value <span className="text-red-500">*</span></label>
+                        <input 
+                            type="number" 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                            value={formData.unitValue}
+                            onChange={e => setFormData({...formData, unitValue: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Fund Cluster <span className="text-red-500">*</span></label>
+                         <select 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                            value={formData.fundClusterId}
+                            onChange={e => setFormData({...formData, fundClusterId: e.target.value})}
+                         >
+                             <option value="">Select Fund...</option>
+                             {funds.map((f: FundCluster) => <option key={f.id} value={f.id}>{f.code} - {f.name}</option>)}
+                         </select>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                     <div>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Department <span className="text-red-500">*</span></label>
+                         <select 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                            value={formData.departmentId}
+                            onChange={e => setFormData({...formData, departmentId: e.target.value})}
+                         >
+                             <option value="">Select Department...</option>
+                             {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                         </select>
+                    </div>
+                    <div>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Location <span className="text-red-500">*</span></label>
+                         <select 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                            value={formData.locationId}
+                            onChange={e => setFormData({...formData, locationId: e.target.value})}
+                         >
+                             <option value="">Select Location...</option>
+                             {locations.map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                         </select>
+                    </div>
+                </div>
+                 <div>
+                     <label className="block text-sm font-medium text-slate-700 mb-1">Custodian <span className="text-red-500">*</span></label>
+                     <select 
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                        value={formData.custodianId}
+                        onChange={e => setFormData({...formData, custodianId: e.target.value})}
+                     >
+                         <option value="">Select Employee...</option>
+                         {employees.map((e: Employee) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
+                     </select>
+                </div>
+                
+                {initialData && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                        <select 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                            value={formData.status}
+                            onChange={e => setFormData({...formData, status: e.target.value})}
+                        >
+                            <option value="Active">Active</option>
+                            <option value="Under Repair">Under Repair</option>
+                            <option value="Missing">Missing</option>
+                            <option value="Retired">Retired</option>
+                        </select>
+                    </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4">
+                    <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
+                    <button onClick={handleSaveAction} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00]">{initialData ? 'Update Asset' : 'Register Asset'}</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const AssetDetail = ({ onBack }: any) => (
+    <div className="space-y-6">
+        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Registry</button>
+        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex justify-between items-start mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800">Aircon Unit (Split Type)</h1>
+                    <div className="text-sm text-slate-500">Property No: 16-09-0630</div>
+                </div>
+                <span className="px-3 py-1 bg-green-100 text-[#006400] rounded-full text-sm font-medium">Active</span>
+            </div>
+            <div className="grid grid-cols-3 gap-8 mb-8">
+                <div>
+                    <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Location</div>
+                    <div className="font-medium text-slate-700">College of Education (Dean's Office)</div>
+                </div>
+                <div>
+                    <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Custodian</div>
+                    <div className="font-medium text-slate-700">Arnel Balbin</div>
+                </div>
+                 <div>
+                    <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Unit Value</div>
+                    <div className="font-medium text-slate-700">{formatCurrency(110000)}</div>
+                </div>
+            </div>
+            <div className="border-t border-slate-100 pt-6">
+                 <h3 className="font-bold text-slate-800 mb-4">History</h3>
+                 <div className="space-y-4">
+                     <div className="flex gap-4 text-sm">
+                         <div className="text-slate-500 w-24">2023-12-15</div>
+                         <div className="text-slate-700">Verified in Annual Physical Count (Matched)</div>
+                     </div>
+                     <div className="flex gap-4 text-sm">
+                         <div className="text-slate-500 w-24">2016-09-26</div>
+                         <div className="text-slate-700">Acquired via Purchase Order PO-16-005</div>
+                     </div>
+                 </div>
+            </div>
+        </div>
+    </div>
+);
+
+// --- Transaction Modules ---
+const StockTransactionList = ({ transactions, onNavigate }: any) => (
+    <div className="space-y-6">
+        <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-slate-800">Stock Transactions</h1>
+            <button onClick={() => onNavigate('transactions-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
+                <Plus size={16} /> New Transaction
+            </button>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+             <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-4">Transaction ID</th>
+                        <th className="px-6 py-4">Type</th>
+                        <th className="px-6 py-4">Date</th>
+                        <th className="px-6 py-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {transactions.map((t: Transaction) => (
+                        <tr key={t.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('transactions-detail')}>
+                            <td className="px-6 py-3 font-medium text-[#006400]">{t.transactionId}</td>
+                            <td className="px-6 py-3"><span className={`flex items-center gap-2 ${t.type === 'Stock In' ? 'text-green-600' : 'text-amber-600'}`}>{t.type === 'Stock In' ? <ArrowDownLeft size={16}/> : <ArrowUpRight size={16}/>} {t.type}</span></td>
+                            <td className="px-6 py-3 text-slate-500">{formatDate(t.date)}</td>
+                             <td className="px-6 py-3"><span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs">{t.status}</span></td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    </div>
+);
+
+const StockTransactionForm = ({ onCancel, onSave, catalog, departments }: any) => {
+    const [lineItems, setLineItems] = useState<any[]>([]);
+
+    const addItem = () => {
+        setLineItems([...lineItems, { id: Date.now(), catalogItemId: '', quantity: 1, remarks: '' }]);
+    };
+
+    const updateItem = (index: number, field: string, value: any) => {
+        const newItems = [...lineItems];
+        newItems[index][field] = value;
+        setLineItems(newItems);
+    };
+
+    const removeItem = (index: number) => {
+         setLineItems(lineItems.filter((_, i) => i !== index));
+    };
+
+    return (
+    <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center gap-4 mb-6">
+             <button onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={20} /></button>
+             <h1 className="text-2xl font-bold text-slate-800">New Stock Transaction</h1>
+        </div>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+             <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Transaction Type</label>
+                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]">
+                        <option>Stock In</option>
+                        <option>Stock Out</option>
+                    </select>
+                 </div>
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                    <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" defaultValue={new Date().toISOString().split('T')[0]} />
+                 </div>
+             </div>
+             <div>
+                 <label className="block text-sm font-medium text-slate-700 mb-1">Department / Source</label>
+                 <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]">
+                     <option>Select Department...</option>
+                     {departments.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                 </select>
+             </div>
+             <div className="pt-4 border-t border-slate-100">
+                 <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-semibold text-slate-800">Line Items</h3>
+                    <button onClick={addItem} className="text-sm bg-green-50 text-[#006400] px-3 py-1 rounded hover:bg-green-100 font-medium">+ Add Item</button>
+                 </div>
+                 
+                 {lineItems.length === 0 ? (
+                    <div className="p-8 bg-slate-50 rounded-lg border border-dashed border-slate-300 text-center text-slate-400 text-sm">
+                        No items added. Click "+ Add Item" to start.
+                    </div>
+                 ) : (
+                    <div className="space-y-3">
+                        {lineItems.map((item, index) => (
+                            <div key={item.id} className="flex gap-3 items-start bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <div className="flex-1">
+                                     <label className="text-xs font-medium text-slate-500 mb-1 block">Item (Consumables Only)</label>
+                                     <select 
+                                        className="w-full border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-[#006400]"
+                                        value={item.catalogItemId}
+                                        onChange={(e) => updateItem(index, 'catalogItemId', e.target.value)}
+                                     >
+                                        <option value="">Select Item...</option>
+                                        {catalog.filter((c:any) => c.itemType === 'Consumable').map((c:any) => <option key={c.id} value={c.id}>{c.article} ({c.quantity} on hand)</option>)}
+                                     </select>
+                                </div>
+                                <div className="w-24">
+                                     <label className="text-xs font-medium text-slate-500 mb-1 block">Quantity</label>
+                                     <input 
+                                        type="number" 
+                                        className="w-full border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-[#006400]"
+                                        value={item.quantity}
+                                        onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value))}
+                                     />
+                                </div>
+                                <div className="flex-1">
+                                     <label className="text-xs font-medium text-slate-500 mb-1 block">Remarks</label>
+                                     <input 
+                                        type="text" 
+                                        className="w-full border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-[#006400]"
+                                        value={item.remarks}
+                                        onChange={(e) => updateItem(index, 'remarks', e.target.value)}
+                                        placeholder="Notes..."
+                                     />
+                                </div>
+                                <button onClick={() => removeItem(index)} className="mt-6 text-slate-400 hover:text-red-500"><Trash2 size={18}/></button>
+                            </div>
+                        ))}
+                    </div>
+                 )}
+             </div>
+             <div className="flex justify-end gap-3 pt-4">
+                <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
+                <button onClick={onSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00]">Save Transaction</button>
+            </div>
+        </div>
+    </div>
+    );
+};
+
+const StockTransactionDetail = ({ onBack }: any) => (
+    <div className="space-y-6">
+        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Transactions</button>
+        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm print:shadow-none print:border-none">
+            <ESSUHeader />
+            <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-200">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800">Stock In Transaction</h1>
+                    <div className="text-slate-500">ID: TXN-2024-001</div>
+                </div>
+                <div className="text-right">
+                    <div className="text-sm text-slate-500">Date</div>
+                    <div className="font-semibold text-slate-800">Jan 15, 2024</div>
+                </div>
+            </div>
+            <table className="w-full text-sm text-left mb-8">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                        <th className="px-4 py-2">Item</th>
+                        <th className="px-4 py-2">Description</th>
+                        <th className="px-4 py-2 text-right">Qty</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    <tr>
+                        <td className="px-4 py-2 font-medium">Bond Paper</td>
+                        <td className="px-4 py-2 text-slate-500">A4, Sub 20</td>
+                        <td className="px-4 py-2 text-right font-bold">100</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                     <div className="text-xs font-bold uppercase">Requested By</div>
+                 </div>
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                     <div className="text-xs font-bold uppercase">Approved By</div>
+                 </div>
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                     <div className="text-xs font-bold uppercase">Received By</div>
+                 </div>
+            </div>
+
+            <div className="flex justify-end gap-3 print:hidden mt-8">
+                <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print</button>
+            </div>
+        </div>
+    </div>
+);
+
+// --- MR Modules ---
+const MRListView = ({ mrs, onNavigate }: any) => (
+    <div className="space-y-6">
+        <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-slate-800">Memorandum Receipts</h1>
+            <button onClick={() => onNavigate('mr-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
+                <Plus size={16} /> Issue MR
+            </button>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+             <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-4">MR Number</th>
+                        <th className="px-6 py-4">Date Issued</th>
+                        <th className="px-6 py-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {mrs.map((m: MemorandumReceipt) => (
+                        <tr key={m.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('mr-detail')}>
+                            <td className="px-6 py-3 font-medium text-[#006400]">{m.mrNumber}</td>
+                            <td className="px-6 py-3 text-slate-500">{formatDate(m.dateIssued)}</td>
+                             <td className="px-6 py-3"><span className="px-2 py-1 bg-green-100 text-[#006400] rounded-full text-xs font-medium">{m.status}</span></td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    </div>
+);
+
+const MRForm = ({ onCancel, onSave, employees }: any) => (
+     <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex items-center gap-4 mb-6">
+             <button onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={20} /></button>
+             <h1 className="text-2xl font-bold text-slate-800">Issue Memorandum Receipt</h1>
+        </div>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+             <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Date Issued</label>
+                    <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Custodian</label>
+                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]">
+                         <option>Select Employee...</option>
+                         {employees.map((e:any) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
+                    </select>
+                 </div>
+             </div>
+             <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Select Available Assets</label>
+                <div className="border border-slate-200 rounded-lg max-h-60 overflow-y-auto bg-slate-50 p-2">
+                    {/* Placeholder for filtered active assets */}
+                    <div className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded mb-2">
+                         <input type="checkbox" className="w-4 h-4 text-[#006400] rounded focus:ring-[#006400]" />
+                         <div className="text-sm">
+                             <div className="font-medium">19-05-1001 - Laptop (Dell)</div>
+                             <div className="text-xs text-slate-500">Value: 45,000.00</div>
+                         </div>
+                    </div>
+                </div>
+             </div>
+             <div className="flex justify-end gap-3 pt-4">
+                <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
+                <button onClick={onSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00]">Issue MR</button>
+            </div>
+        </div>
+    </div>
+);
+
+const MRDetail = ({ onBack }: any) => (
+     <div className="space-y-6">
+        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to MR List</button>
+        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+             <ESSUHeader />
+             <h1 className="text-center text-xl font-bold uppercase mb-8">Memorandum Receipt for Property, Plant and Equipment</h1>
+             <div className="grid grid-cols-2 gap-8 text-sm mb-6">
+                 <div>
+                     <span className="font-semibold">MR Number:</span> MR-2016-085
+                 </div>
+                 <div className="text-right">
+                     <span className="font-semibold">Date:</span> Sept 26, 2016
+                 </div>
+             </div>
+             <table className="w-full text-sm text-left border border-slate-300 mb-8">
+                <thead className="bg-slate-100 text-slate-800 font-semibold">
+                    <tr>
+                        <th className="px-4 py-2 border border-slate-300">Property No.</th>
+                        <th className="px-4 py-2 border border-slate-300">Description</th>
+                        <th className="px-4 py-2 border border-slate-300 text-right">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                         <td className="px-4 py-2 border border-slate-300">16-09-0630</td>
+                         <td className="px-4 py-2 border border-slate-300">Aircon Unit, 3HP</td>
+                         <td className="px-4 py-2 border border-slate-300 text-right">110,000.00</td>
+                    </tr>
+                </tbody>
+             </table>
+             <div className="grid grid-cols-2 gap-20 mt-12 print:block print:grid-cols-2">
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                     <div className="text-sm font-bold uppercase">Received By</div>
+                     <div className="text-xs">Signature over Printed Name</div>
+                 </div>
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                     <div className="text-sm font-bold uppercase">Issued By</div>
+                     <div className="text-xs">Supply Officer</div>
+                 </div>
+            </div>
+             <div className="flex justify-end gap-3 print:hidden mt-8">
+                <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print MR</button>
+            </div>
+        </div>
+    </div>
+);
+
+// --- Audit Modules ---
+const AuditList = ({ audits, onNavigate }: any) => (
+    <div className="space-y-6">
+        <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-slate-800">Physical Counts</h1>
+            <button onClick={() => onNavigate('audit-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
+                <Plus size={16} /> New Session
+            </button>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+             <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-4">Session ID</th>
+                        <th className="px-6 py-4">Date</th>
+                        <th className="px-6 py-4">Description</th>
+                        <th className="px-6 py-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {audits.map((a: AuditSession) => (
+                        <tr key={a.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('audit-detail', a)}>
+                            <td className="px-6 py-3 font-medium text-[#006400]">{a.sessionId}</td>
+                            <td className="px-6 py-3 text-slate-500">{formatDate(a.date)}</td>
+                            <td className="px-6 py-3 text-slate-600">{a.description}</td>
+                             <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${a.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-[#006400]'}`}>{a.status}</span></td>
+                        </tr>
+                    ))}
+                    {audits.length === 0 && (
+                        <tr>
+                            <td colSpan={4} className="px-6 py-8 text-center text-slate-400">No audit sessions found.</td>
+                        </tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+    </div>
+);
+
+const AuditNew = ({ onCancel, onSave, locations, departments, assets }: any) => {
+    const [sessionId] = useState(`PC-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`);
+    const [description, setDescription] = useState('');
+    const [selectedLoc, setSelectedLoc] = useState('');
+    const [selectedDept, setSelectedDept] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const handleStart = () => {
+        if (!description || (!selectedLoc && !selectedDept)) {
+            alert("Description and at least one scope (Location or Department) are required.");
+            return;
+        }
+
+        // Filter active assets based on selection
+        const relevantAssets = assets.filter((a: Asset) => {
+            if (a.status !== 'Active') return false;
+            const matchLoc = selectedLoc ? a.locationId === selectedLoc : true;
+            const matchDept = selectedDept ? a.departmentId === selectedDept : true;
+            return matchLoc && matchDept;
+        });
+
+        // Create Audit Items Snapshot
+        const auditItems: AuditItem[] = relevantAssets.map((a: Asset) => ({
+            assetId: a.id,
+            propertyNumber: a.propertyNumber,
+            description: a.description,
+            unitValue: a.unitValue,
+            systemQty: a.quantity,
+            actualQty: null, // Start uncounted
+            shortageOverageQty: 0,
+            shortageOverageValue: 0,
+            status: 'Uncounted',
+            locationName: locations.find((l: Location) => l.id === a.locationId)?.name || 'Unknown',
+            custodianName: 'Unknown' // Ideally mapped from employees
+        }));
+
+        const newSession: AuditSession = {
+            id: generateId(),
+            sessionId,
+            date,
+            departmentId: selectedDept,
+            locationId: selectedLoc,
+            description,
+            items: auditItems,
+            status: 'Draft',
+            createdBy: 'Jeffrey Meneses',
+            createdAt: new Date().toISOString()
+        };
+
+        onSave(newSession);
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto space-y-6">
+            <div className="flex items-center gap-4 mb-6">
+                <button onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={20} /></button>
+                <h1 className="text-2xl font-bold text-slate-800">New Physical Count Session</h1>
+            </div>
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="p-4 bg-green-50 text-[#006400] text-sm rounded-lg flex gap-2">
+                    <Info size={18} className="shrink-0" />
+                    <div>Starting a new session will create a snapshot of all currently active assets matching your selected scope.</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Session ID</label>
+                        <input type="text" disabled value={sessionId} className="w-full border border-slate-200 bg-slate-50 text-slate-500 rounded-lg px-3 py-2" />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" />
+                     </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Session Title / Description</label>
+                    <input 
+                        type="text" 
+                        placeholder="e.g. 2024 Year-End Count - College of Education"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" 
+                        value={description} 
+                        onChange={e => setDescription(e.target.value)}
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Location Scope (Optional)</label>
+                        <select 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                            value={selectedLoc}
+                            onChange={e => setSelectedLoc(e.target.value)}
+                        >
+                            <option value="">All Locations</option>
+                            {locations.map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Department Scope (Optional)</label>
+                        <select 
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                            value={selectedDept}
+                            onChange={e => setSelectedDept(e.target.value)}
+                        >
+                            <option value="">All Departments</option>
+                            {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                    <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
+                    <button onClick={handleStart} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] flex items-center gap-2">
+                        Start Counting <ArrowRightLeft size={16} />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AuditWorksheet = ({ audit, onBack, onSaveDraft, onFinalize }: any) => {
+    const [items, setItems] = useState<AuditItem[]>(audit.items);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const handleCountChange = (index: number, val: string) => {
+        const newActual = val === '' ? null : parseFloat(val);
+        const newItems = [...items];
+        const item = newItems[index];
+        
+        item.actualQty = newActual;
+        
+        // Calculate status
+        if (newActual === null) {
+            item.status = 'Uncounted';
+            item.shortageOverageQty = 0;
+            item.shortageOverageValue = 0;
+        } else {
+            const diff = newActual - item.systemQty;
+            item.shortageOverageQty = diff;
+            item.shortageOverageValue = diff * item.unitValue;
+            
+            if (diff === 0) item.status = 'Matched';
+            else if (diff < 0) item.status = 'Shortage';
+            else item.status = 'Overage';
+        }
+        setItems(newItems);
+    };
+
+    const handleRemarkChange = (index: number, val: string) => {
+        const newItems = [...items];
+        newItems[index].remarks = val;
+        setItems(newItems);
+    };
+
+    const filteredItems = items.filter(i => 
+        i.propertyNumber.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        i.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const stats = {
+        total: items.length,
+        counted: items.filter(i => i.actualQty !== null).length,
+        shortages: items.filter(i => i.status === 'Shortage').length,
+        value: items.reduce((sum, i) => sum + (i.status === 'Shortage' ? Math.abs(i.shortageOverageValue) : 0), 0)
+    };
+
+    const progress = Math.round((stats.counted / stats.total) * 100) || 0;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                     <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={20} /></button>
+                     <div>
+                        <h1 className="text-xl font-bold text-slate-800">{audit.sessionId}: {audit.description}</h1>
+                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                             <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${audit.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-[#006400]'}`}>{audit.status}</span>
+                             <span>•</span>
+                             <span>{formatDate(audit.date)}</span>
+                        </div>
+                     </div>
+                </div>
+                <div className="flex gap-2">
+                     <button onClick={() => onSaveDraft({...audit, items})} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex gap-2 items-center"><Save size={16}/> Save Draft</button>
+                     <button onClick={() => { if(confirm('Finalize this audit? This cannot be undone.')) onFinalize({...audit, items}) }} className="px-4 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] flex gap-2 items-center"><Check size={16}/> Finalize</button>
+                </div>
+            </div>
+
+            {/* Metrics Panel */}
+            <div className="grid grid-cols-4 gap-4">
+                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="text-xs text-slate-500 uppercase font-bold">Progress</div>
+                    <div className="text-2xl font-bold text-slate-800">{progress}%</div>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div className="bg-[#006400] h-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                    </div>
+                 </div>
+                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="text-xs text-slate-500 uppercase font-bold">Matched</div>
+                    <div className="text-2xl font-bold text-green-600">{items.filter(i => i.status === 'Matched').length}</div>
+                 </div>
+                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="text-xs text-slate-500 uppercase font-bold">Shortages</div>
+                    <div className="text-2xl font-bold text-red-600">{stats.shortages}</div>
+                 </div>
+                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="text-xs text-slate-500 uppercase font-bold">Shortage Value</div>
+                    <div className="text-2xl font-bold text-red-600">{formatCurrency(stats.value)}</div>
+                 </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="relative max-w-md mb-4">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Filter items..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left border-collapse">
+                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                            <tr>
+                                <th className="px-4 py-3">Property No</th>
+                                <th className="px-4 py-3">Description</th>
+                                <th className="px-4 py-3 text-center">System Qty</th>
+                                <th className="px-4 py-3 text-center w-32">Actual Count</th>
+                                <th className="px-4 py-3 text-center">Variance</th>
+                                <th className="px-4 py-3 text-center">Status</th>
+                                <th className="px-4 py-3">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredItems.map((item, index) => {
+                                const rowClass = item.status === 'Shortage' ? 'bg-red-50/50' : 
+                                               item.status === 'Overage' ? 'bg-blue-50/50' : 
+                                               item.status === 'Matched' ? 'bg-green-50/30' : '';
+                                
+                                return (
+                                    <tr key={item.assetId} className={rowClass}>
+                                        <td className="px-4 py-3 font-medium text-slate-700">{item.propertyNumber}</td>
+                                        <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{item.description}</td>
+                                        <td className="px-4 py-3 text-center font-bold text-slate-700">{item.systemQty}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            <input 
+                                                type="number" 
+                                                className={`w-20 border rounded-lg text-center py-1 outline-none focus:ring-2 ${
+                                                    item.status === 'Shortage' ? 'border-red-300 focus:border-red-500 focus:ring-red-200' :
+                                                    item.status === 'Matched' ? 'border-green-300 focus:border-green-500 focus:ring-green-200' :
+                                                    'border-slate-300 focus:border-[#006400] focus:ring-green-100'
+                                                }`} 
+                                                value={item.actualQty === null ? '' : item.actualQty}
+                                                onChange={(e) => handleCountChange(index, e.target.value)}
+                                                placeholder="-"
+                                            />
+                                        </td>
+                                        <td className={`px-4 py-3 text-center font-bold ${item.shortageOverageQty < 0 ? 'text-red-600' : item.shortageOverageQty > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                                            {item.shortageOverageQty > 0 ? `+${item.shortageOverageQty}` : item.shortageOverageQty}
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <span className={`px-2 py-1 rounded text-xs font-bold border ${
+                                                item.status === 'Shortage' ? 'bg-red-100 text-red-700 border-red-200' :
+                                                item.status === 'Matched' ? 'bg-green-100 text-green-700 border-green-200' :
+                                                item.status === 'Overage' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                'bg-slate-100 text-slate-500 border-slate-200'
+                                            }`}>
+                                                {item.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                             <input 
+                                                type="text" 
+                                                className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-[#006400] outline-none text-xs"
+                                                placeholder="Add remarks..."
+                                                value={item.remarks || ''}
+                                                onChange={(e) => handleRemarkChange(index, e.target.value)}
+                                            />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AuditReport = ({ audit, onBack }: any) => {
+    const stats = {
+        total: audit.items.length,
+        shortageCount: audit.items.filter((i: AuditItem) => i.status === 'Shortage').length,
+        shortageValue: audit.items.reduce((sum: number, i: AuditItem) => sum + (i.status === 'Shortage' ? Math.abs(i.shortageOverageValue) : 0), 0)
+    };
+
+    return (
+        <div className="space-y-6">
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400] print:hidden"><ChevronLeft size={16}/> Back to Sessions</button>
+            <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm print:shadow-none print:border-none">
+                <ESSUHeader />
+                <div className="text-center mb-8">
+                    <h1 className="text-xl font-bold uppercase tracking-wide">Report on the Physical Count of Property, Plant and Equipment</h1>
+                    <div className="text-sm mt-2 font-medium text-slate-600">{audit.description}</div>
+                    <div className="text-sm text-slate-500">As of {formatDate(audit.date)}</div>
+                </div>
+
+                <div className="mb-6 flex justify-between text-sm border p-4 rounded bg-slate-50 print:bg-transparent print:border-none print:p-0">
+                     <div>
+                        <div className="text-slate-500">Session ID</div>
+                        <div className="font-bold">{audit.sessionId}</div>
+                     </div>
+                     <div className="text-right">
+                        <div className="text-slate-500">Total Shortage Value</div>
+                        <div className="font-bold text-red-600 text-lg">{formatCurrency(stats.shortageValue)}</div>
+                     </div>
+                </div>
+
+                <table className="w-full text-sm text-left border-collapse border border-slate-300 mb-8">
+                    <thead className="bg-slate-100 text-slate-800 font-semibold print:bg-transparent">
+                        <tr>
+                            <th className="px-3 py-2 border border-slate-300">Property No</th>
+                            <th className="px-3 py-2 border border-slate-300">Description</th>
+                            <th className="px-3 py-2 border border-slate-300 text-center">System Qty</th>
+                            <th className="px-3 py-2 border border-slate-300 text-center">Actual Count</th>
+                            <th className="px-3 py-2 border border-slate-300 text-center">Overage/Shortage</th>
+                            <th className="px-3 py-2 border border-slate-300 text-right">Value</th>
+                            <th className="px-3 py-2 border border-slate-300">Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {audit.items.map((item: AuditItem) => (
+                            <tr key={item.assetId}>
+                                <td className="px-3 py-2 border border-slate-300">{item.propertyNumber}</td>
+                                <td className="px-3 py-2 border border-slate-300 max-w-xs truncate">{item.description}</td>
+                                <td className="px-3 py-2 border border-slate-300 text-center">{item.systemQty}</td>
+                                <td className="px-3 py-2 border border-slate-300 text-center">{item.actualQty}</td>
+                                <td className={`px-3 py-2 border border-slate-300 text-center font-bold ${item.shortageOverageQty < 0 ? 'text-red-600' : ''}`}>
+                                    {item.shortageOverageQty}
+                                </td>
+                                <td className="px-3 py-2 border border-slate-300 text-right">
+                                    {item.shortageOverageValue !== 0 ? formatCurrency(Math.abs(item.shortageOverageValue)) : '-'}
+                                </td>
+                                <td className="px-3 py-2 border border-slate-300">{item.remarks}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                <div className="grid grid-cols-3 gap-8 mt-12 pt-12 print:block print:grid-cols-3">
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                         <div className="text-xs font-bold uppercase">Certified Correct By:</div>
+                         <div className="text-[10px] mt-1">Inventory Committee</div>
+                     </div>
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                         <div className="text-xs font-bold uppercase">Approved By:</div>
+                         <div className="text-[10px] mt-1">Head of Agency</div>
+                     </div>
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                         <div className="text-xs font-bold uppercase">Verified By:</div>
+                         <div className="text-[10px] mt-1">COA Representative</div>
+                     </div>
+                </div>
+
+                <div className="flex justify-end gap-3 print:hidden mt-8">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print Report</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Master Data Views ---
+const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+    const [formData, setFormData] = useState({ 
+        employeeId: '', 
+        firstName: '', 
+        lastName: '', 
+        middleName: '', 
+        position: '', 
+        departmentId: '', 
+        status: 'Active' 
+    });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterDept, setFilterDept] = useState('All');
+    const [showInactive, setShowInactive] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleEdit = (emp: Employee) => {
+        setEditingEmployee(emp);
+        setFormData({
+            employeeId: emp.employeeId,
+            firstName: emp.firstName,
+            lastName: emp.lastName,
+            middleName: emp.middleName || '',
+            position: emp.position || '',
+            departmentId: emp.departmentId,
+            status: emp.status
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingEmployee(null);
+        setFormData({ employeeId: '', firstName: '', lastName: '', middleName: '', position: '', departmentId: '', status: 'Active' });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to deactivate this employee?')) {
+            const updated = employees.map((e: Employee) => e.id === id ? { ...e, status: 'Inactive', updatedAt: new Date().toISOString() } : e);
+            setEmployees(updated);
+            if (onLog) onLog('Deactivated Employee', 'Master Data', `Deactivated employee ID: ${id}`, id);
+        }
+    };
+
+    const handleSave = () => {
+        if (!formData.employeeId || !formData.firstName || !formData.lastName || !formData.departmentId) {
+            setError('Employee ID, First Name, Last Name, and Department are required.');
+            return;
+        }
+
+        const isDuplicateId = employees.some((e: Employee) => e.employeeId === formData.employeeId && e.id !== editingEmployee?.id);
+        if (isDuplicateId) {
+            setError('Employee ID must be unique.');
+            return;
+        }
+
+        const timestamp = new Date().toISOString();
+
+        if (editingEmployee) {
+            const updated = employees.map((e: Employee) => e.id === editingEmployee.id ? { ...e, ...formData, updatedAt: timestamp } : e);
+            setEmployees(updated);
+            if (onLog) onLog('Updated Employee', 'Master Data', `Updated employee: ${formData.employeeId}`, editingEmployee.id);
+        } else {
+            const newEmp: Employee = {
+                id: generateId(),
+                ...formData,
+                status: formData.status as 'Active' | 'Inactive',
+                createdAt: timestamp,
+                updatedAt: timestamp
+            };
+            setEmployees([...employees, newEmp]);
+            if (onLog) onLog('Created Employee', 'Master Data', `Created employee: ${formData.employeeId}`, newEmp.id);
+        }
+        setIsModalOpen(false);
+    };
+
+    const filteredEmployees = employees.filter((e: Employee) => {
+        const matchesSearch = getEmployeeFullName(e).toLowerCase().includes(searchTerm.toLowerCase()) || e.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesDept = filterDept === 'All' || e.departmentId === filterDept;
+        const matchesStatus = showInactive ? true : e.status === 'Active';
+        return matchesSearch && matchesDept && matchesStatus;
+    });
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                 <h1 className="text-2xl font-bold text-slate-800">Employees Master Data</h1>
+                 <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
+                    <Plus size={16}/> Add Employee
+                </button>
+            </div>
+
+            <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-wrap">
+                <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search by name or ID..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <select 
+                    className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                    value={filterDept}
+                    onChange={(e) => setFilterDept(e.target.value)}
+                >
+                    <option value="All">All Departments</option>
+                    {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
+                    {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
+                    {showInactive ? 'Showing Inactive' : 'Hide Inactive'}
+                </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">ID</th>
+                            <th className="px-6 py-4">Full Name</th>
+                            <th className="px-6 py-4">Position</th>
+                            <th className="px-6 py-4">Department</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredEmployees.map((e: Employee) => (
+                            <tr key={e.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-slate-700">{e.employeeId}</td>
+                                <td className="px-6 py-3 text-[#006400] font-medium">{getEmployeeFullName(e)}</td>
+                                <td className="px-6 py-3 text-slate-600">{e.position || '-'}</td>
+                                <td className="px-6 py-3 text-slate-600">{departments.find((d:any) => d.id === e.departmentId)?.code || e.departmentId}</td>
+                                <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${e.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{e.status}</span></td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleEdit(e)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
+                                        <button onClick={() => handleDelete(e.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                         {filteredEmployees.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-8 text-center text-slate-400">No employees found matching your criteria.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">{editingEmployee ? 'Edit Employee' : 'New Employee'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Employee ID <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        placeholder="e.g. 2023-001"
+                                        value={formData.employeeId}
+                                        onChange={e => setFormData({...formData, employeeId: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Department <span className="text-red-500">*</span></label>
+                                    <select 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                        value={formData.departmentId}
+                                        onChange={e => setFormData({...formData, departmentId: e.target.value})}
+                                    >
+                                        <option value="">Select Department...</option>
+                                        {departments.filter((d: Department) => d.status === 'Active').map((d: Department) => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">First Name <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        value={formData.firstName}
+                                        onChange={e => setFormData({...formData, firstName: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Middle Name</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        value={formData.middleName}
+                                        onChange={e => setFormData({...formData, middleName: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Last Name <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        value={formData.lastName}
+                                        onChange={e => setFormData({...formData, lastName: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Position</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. Instructor I"
+                                    value={formData.position}
+                                    onChange={e => setFormData({...formData, position: e.target.value})}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <span className="text-sm font-medium text-slate-700">Active Status</span>
+                                <button onClick={() => setFormData({...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active'})} className="text-[#006400]">
+                                    {formData.status === 'Active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                                </button>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-3">
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
+                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Employee</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }: any) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingDept, setEditingDept] = useState<Department | null>(null);
+    const [formData, setFormData] = useState({ code: '', name: '', head: '', locationId: '', status: 'Active' });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showInactive, setShowInactive] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleEdit = (dept: Department) => {
+        setEditingDept(dept);
+        setFormData({
+            code: dept.code,
+            name: dept.name,
+            head: dept.head || '',
+            locationId: dept.locationId || '',
+            status: dept.status
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingDept(null);
+        setFormData({ code: '', name: '', head: '', locationId: '', status: 'Active' });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to deactivate this department?')) {
+            const updated = departments.map((d: Department) => d.id === id ? { ...d, status: 'Inactive', updatedAt: new Date().toISOString() } : d);
+            setDepartments(updated);
+            if (onLog) onLog('Deactivated Department', 'Master Data', `Deactivated department ID: ${id}`, id);
+        }
+    };
+
+    const handleSave = () => {
+        // Validation
+        if (!formData.code || !formData.name || !formData.locationId) {
+            setError('Code, Name, and Location are required.');
+            return;
+        }
+
+        // Uniqueness Check
+        const isCodeDuplicate = departments.some((d: Department) => d.code === formData.code && d.id !== editingDept?.id);
+        const isNameDuplicate = departments.some((d: Department) => d.name === formData.name && d.id !== editingDept?.id);
+
+        if (isCodeDuplicate) { setError('Department Code must be unique.'); return; }
+        if (isNameDuplicate) { setError('Department Name must be unique.'); return; }
+
+        const timestamp = new Date().toISOString();
+
+        if (editingDept) {
+            const updated = departments.map((d: Department) => d.id === editingDept.id ? { ...d, ...formData, updatedAt: timestamp } : d);
+            setDepartments(updated);
+            if (onLog) onLog('Updated Department', 'Master Data', `Updated department: ${formData.code}`, editingDept.id);
+        } else {
+            const newDept: Department = {
+                id: generateId(),
+                ...formData,
+                status: formData.status as 'Active' | 'Inactive',
+                createdAt: timestamp,
+                updatedAt: timestamp
+            };
+            setDepartments([...departments, newDept]);
+            if (onLog) onLog('Created Department', 'Master Data', `Created department: ${formData.code}`, newDept.id);
+        }
+        setIsModalOpen(false);
+    };
+
+    const filteredDepartments = departments.filter((d: Department) => {
+        const matchesSearch = d.name.toLowerCase().includes(searchTerm.toLowerCase()) || d.code.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = showInactive ? true : d.status === 'Active';
+        return matchesSearch && matchesStatus;
+    });
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h1 className="text-2xl font-bold text-slate-800">Departments</h1>
+                <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
+                    <Plus size={16}/> Add Department
+                </button>
+            </div>
+
+            <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search by name or code..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
+                        {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
+                        {showInactive ? 'Showing Inactive' : 'Hide Inactive'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Code</th>
+                            <th className="px-6 py-4">Name</th>
+                            <th className="px-6 py-4">Head of Office</th>
+                            <th className="px-6 py-4">Location</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredDepartments.map((d: Department) => (
+                            <tr key={d.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{d.code}</td>
+                                <td className="px-6 py-3 text-slate-700">{d.name}</td>
+                                <td className="px-6 py-3 text-slate-600">{d.head || '-'}</td>
+                                <td className="px-6 py-3 text-slate-600">{locations.find((l:any) => l.id === d.locationId)?.name || '-'}</td>
+                                <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${d.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{d.status}</span></td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleEdit(d)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
+                                        <button onClick={() => handleDelete(d.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredDepartments.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-8 text-center text-slate-400">No departments found matching your criteria.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">{editingDept ? 'Edit Department' : 'New Department'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                            
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Department Code <span className="text-red-500">*</span></label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. CCS"
+                                    value={formData.code}
+                                    onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})}
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Department Name <span className="text-red-500">*</span></label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. College of Computer Studies"
+                                    value={formData.name}
+                                    onChange={e => setFormData({...formData, name: e.target.value})}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Head of Office</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. Dr. Juan Dela Cruz"
+                                    value={formData.head}
+                                    onChange={e => setFormData({...formData, head: e.target.value})}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Location <span className="text-red-500">*</span></label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={formData.locationId}
+                                    onChange={e => setFormData({...formData, locationId: e.target.value})}
+                                >
+                                    <option value="">Select Location...</option>
+                                    {locations.filter((l:Location) => l.status === 'Active').map((l: Location) => (
+                                        <option key={l.id} value={l.id}>{l.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <span className="text-sm font-medium text-slate-700">Active Status</span>
+                                <button onClick={() => setFormData({...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active'})} className="text-[#006400]">
+                                    {formData.status === 'Active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                                </button>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-3">
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
+                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Department</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingLoc, setEditingLoc] = useState<Location | null>(null);
+    const [formData, setFormData] = useState({ code: '', name: '', description: '', status: 'Active' });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showInactive, setShowInactive] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleEdit = (loc: Location) => {
+        setEditingLoc(loc);
+        setFormData({
+            code: loc.code,
+            name: loc.name,
+            description: loc.description || '',
+            status: loc.status
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingLoc(null);
+        setFormData({ code: '', name: '', description: '', status: 'Active' });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to deactivate this location?')) {
+            const updated = locations.map((l: Location) => l.id === id ? { ...l, status: 'Inactive', updatedAt: new Date().toISOString() } : l);
+            setLocations(updated);
+            if (onLog) onLog('Deactivated Location', 'Master Data', `Deactivated location ID: ${id}`, id);
+        }
+    };
+
+    const handleSave = () => {
+        // Validation
+        if (!formData.code || !formData.name) {
+            setError('Code and Name are required.');
+            return;
+        }
+
+        // Uniqueness Check
+        const isCodeDuplicate = locations.some((l: Location) => l.code === formData.code && l.id !== editingLoc?.id);
+        const isNameDuplicate = locations.some((l: Location) => l.name === formData.name && l.id !== editingLoc?.id);
+
+        if (isCodeDuplicate) { setError('Location Code must be unique.'); return; }
+        if (isNameDuplicate) { setError('Location Name must be unique.'); return; }
+
+        const timestamp = new Date().toISOString();
+
+        if (editingLoc) {
+            const updated = locations.map((l: Location) => l.id === editingLoc.id ? { ...l, ...formData, updatedAt: timestamp } : l);
+            setLocations(updated);
+            if (onLog) onLog('Updated Location', 'Master Data', `Updated location: ${formData.code}`, editingLoc.id);
+        } else {
+            const newLoc: Location = {
+                id: generateId(),
+                ...formData,
+                status: formData.status as 'Active' | 'Inactive',
+                createdAt: timestamp,
+                updatedAt: timestamp
+            };
+            setLocations([...locations, newLoc]);
+            if (onLog) onLog('Created Location', 'Master Data', `Created location: ${formData.code}`, newLoc.id);
+        }
+        setIsModalOpen(false);
+    };
+
+    const filteredLocations = locations.filter((l: Location) => {
+        const matchesSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase()) || l.code.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = showInactive ? true : l.status === 'Active';
+        return matchesSearch && matchesStatus;
+    });
+
+    return (
+     <div className="space-y-6">
+        <div className="flex justify-between items-center">
+             <h1 className="text-2xl font-bold text-slate-800">Locations</h1>
+             <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
+                <Plus size={16}/> Add Location
+            </button>
+        </div>
+
+        <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                    type="text" 
+                    placeholder="Search by name or code..." 
+                    className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+            </div>
+            <div className="flex items-center gap-2">
+                <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
+                    {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
+                    {showInactive ? 'Showing Inactive' : 'Hide Inactive'}
+                </button>
+            </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-4">Code</th>
+                        <th className="px-6 py-4">Name</th>
+                        <th className="px-6 py-4">Description</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {filteredLocations.map((l: Location) => (
+                        <tr key={l.id} className="hover:bg-slate-50">
+                            <td className="px-6 py-3 font-medium text-[#006400]">{l.code}</td>
+                            <td className="px-6 py-3 text-slate-700">{l.name}</td>
+                            <td className="px-6 py-3 text-slate-600">{l.description}</td>
+                            <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${l.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{l.status}</span></td>
+                            <td className="px-6 py-3 text-right">
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => handleEdit(l)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
+                                    <button onClick={() => handleDelete(l.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                    {filteredLocations.length === 0 && (
+                        <tr>
+                            <td colSpan={5} className="px-6 py-8 text-center text-slate-400">No locations found matching your criteria.</td>
+                        </tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+
+        {isModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                        <h3 className="font-bold text-slate-800">{editingLoc ? 'Edit Location' : 'New Location'}</h3>
+                        <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Location Code <span className="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                placeholder="e.g. LIB"
+                                value={formData.code}
+                                onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})}
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Location Name <span className="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                placeholder="e.g. Main Library"
+                                value={formData.name}
+                                onChange={e => setFormData({...formData, name: e.target.value})}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+                            <input 
+                                type="text" 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                placeholder="e.g. Ground Floor, Right Wing"
+                                value={formData.description}
+                                onChange={e => setFormData({...formData, description: e.target.value})}
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <span className="text-sm font-medium text-slate-700">Active Status</span>
+                            <button onClick={() => setFormData({...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active'})} className="text-[#006400]">
+                                {formData.status === 'Active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                            </button>
+                        </div>
+
+                        <div className="pt-2 flex justify-end gap-3">
+                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
+                            <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Location</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+    </div>
+    );
+};
+
+const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingFund, setEditingFund] = useState<FundCluster | null>(null);
+    const [formData, setFormData] = useState({ code: '', name: '', description: '', status: 'Active' });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showInactive, setShowInactive] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleEdit = (fund: FundCluster) => {
+        setEditingFund(fund);
+        setFormData({
+            code: fund.code,
+            name: fund.name,
+            description: fund.description || '',
+            status: fund.status
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingFund(null);
+        setFormData({ code: '', name: '', description: '', status: 'Active' });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to deactivate this fund cluster?')) {
+            const updated = funds.map((f: FundCluster) => f.id === id ? { ...f, status: 'Inactive', updatedAt: new Date().toISOString() } : f);
+            setFunds(updated);
+            if (onLog) onLog('Deactivated Fund Cluster', 'Master Data', `Deactivated fund cluster ID: ${id}`, id);
+        }
+    };
+
+    const handleSave = () => {
+        if (!formData.code || !formData.name) {
+            setError('Code and Name are required.');
+            return;
+        }
+
+        const isCodeDuplicate = funds.some((f: FundCluster) => f.code === formData.code && f.id !== editingFund?.id);
+        const isNameDuplicate = funds.some((f: FundCluster) => f.name === formData.name && f.id !== editingFund?.id);
+
+        if (isCodeDuplicate) { setError('Fund Cluster Code must be unique.'); return; }
+        if (isNameDuplicate) { setError('Fund Cluster Name must be unique.'); return; }
+
+        const timestamp = new Date().toISOString();
+
+        if (editingFund) {
+            const updated = funds.map((f: FundCluster) => f.id === editingFund.id ? { ...f, ...formData, updatedAt: timestamp } : f);
+            setFunds(updated);
+            if (onLog) onLog('Updated Fund Cluster', 'Master Data', `Updated fund cluster: ${formData.code}`, editingFund.id);
+        } else {
+            const newFund: FundCluster = {
+                id: generateId(),
+                ...formData,
+                status: formData.status as 'Active' | 'Inactive',
+                createdAt: timestamp,
+                updatedAt: timestamp
+            };
+            setFunds([...funds, newFund]);
+            if (onLog) onLog('Created Fund Cluster', 'Master Data', `Created fund cluster: ${formData.code}`, newFund.id);
+        }
+        setIsModalOpen(false);
+    };
+
+    const filteredFunds = funds.filter((f: FundCluster) => {
+        const matchesSearch = f.name.toLowerCase().includes(searchTerm.toLowerCase()) || f.code.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = showInactive ? true : f.status === 'Active';
+        return matchesSearch && matchesStatus;
+    });
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                 <h1 className="text-2xl font-bold text-slate-800">Fund Clusters</h1>
+                 <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
+                    <Plus size={16}/> Add Fund
+                </button>
+            </div>
+
+            <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search by name or code..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
+                        {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
+                        {showInactive ? 'Showing Inactive' : 'Hide Inactive'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Code</th>
+                            <th className="px-6 py-4">Name</th>
+                            <th className="px-6 py-4">Description</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredFunds.map((f: FundCluster) => (
+                            <tr key={f.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{f.code}</td>
+                                <td className="px-6 py-3 text-slate-700">{f.name}</td>
+                                <td className="px-6 py-3 text-slate-600">{f.description}</td>
+                                <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${f.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{f.status}</span></td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
+                                        <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredFunds.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">No fund clusters found matching your criteria.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">{editingFund ? 'Edit Fund Cluster' : 'New Fund Cluster'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                            
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Fund Code <span className="text-red-500">*</span></label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. 101"
+                                    value={formData.code}
+                                    onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})}
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Fund Name <span className="text-red-500">*</span></label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. Regular Agency Fund"
+                                    value={formData.name}
+                                    onChange={e => setFormData({...formData, name: e.target.value})}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. General Fund"
+                                    value={formData.description}
+                                    onChange={e => setFormData({...formData, description: e.target.value})}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <span className="text-sm font-medium text-slate-700">Active Status</span>
+                                <button onClick={() => setFormData({...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active'})} className="text-[#006400]">
+                                    {formData.status === 'Active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                                </button>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-3">
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
+                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Fund Cluster</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingCategory, setEditingCategory] = useState<AssetCategory | null>(null);
+    const [formData, setFormData] = useState({ code: '', name: '', description: '', type: 'PPE', status: 'Active' });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showInactive, setShowInactive] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleEdit = (cat: AssetCategory) => {
+        setEditingCategory(cat);
+        setFormData({
+            code: cat.code,
+            name: cat.name,
+            description: cat.description || '',
+            type: cat.type || 'PPE',
+            status: cat.status
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingCategory(null);
+        setFormData({ code: '', name: '', description: '', type: 'PPE', status: 'Active' });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to deactivate this category?')) {
+            const updated = categories.map((c: AssetCategory) => c.id === id ? { ...c, status: 'Inactive', updatedAt: new Date().toISOString() } : c);
+            setCategories(updated);
+            if (onLog) onLog('Deactivated Category', 'Master Data', `Deactivated category ID: ${id}`, id);
+        }
+    };
+
+    const handleSave = () => {
+        if (!formData.code || !formData.name) {
+            setError('Code and Name are required.');
+            return;
+        }
+
+        const isCodeDuplicate = categories.some((c: AssetCategory) => c.code === formData.code && c.id !== editingCategory?.id);
+        const isNameDuplicate = categories.some((c: AssetCategory) => c.name === formData.name && c.id !== editingCategory?.id);
+
+        if (isCodeDuplicate) { setError('Category Code must be unique.'); return; }
+        if (isNameDuplicate) { setError('Category Name must be unique.'); return; }
+
+        const timestamp = new Date().toISOString();
+
+        if (editingCategory) {
+            const updated = categories.map((c: AssetCategory) => c.id === editingCategory.id ? { ...c, ...formData, updatedAt: timestamp } : c);
+            setCategories(updated);
+            if (onLog) onLog('Updated Category', 'Master Data', `Updated category: ${formData.code}`, editingCategory.id);
+        } else {
+            const newCat: AssetCategory = {
+                id: generateId(),
+                ...formData,
+                status: formData.status as 'Active' | 'Inactive',
+                type: formData.type as any,
+                createdAt: timestamp,
+                updatedAt: timestamp
+            };
+            setCategories([...categories, newCat]);
+            if (onLog) onLog('Created Category', 'Master Data', `Created category: ${formData.code}`, newCat.id);
+        }
+        setIsModalOpen(false);
+    };
+
+    const filteredCategories = categories.filter((c: AssetCategory) => {
+        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.code.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = showInactive ? true : c.status === 'Active';
+        return matchesSearch && matchesStatus;
+    });
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                 <h1 className="text-2xl font-bold text-slate-800">Asset Categories</h1>
+                 <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
+                    <Plus size={16}/> Add Category
+                </button>
+            </div>
+
+            <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search by name or code..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
+                        {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
+                        {showInactive ? 'Showing Inactive' : 'Hide Inactive'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Code</th>
+                            <th className="px-6 py-4">Name</th>
+                            <th className="px-6 py-4">Type</th>
+                            <th className="px-6 py-4">Description</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredCategories.map((c: AssetCategory) => (
+                            <tr key={c.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{c.code}</td>
+                                <td className="px-6 py-3 text-slate-700">{c.name}</td>
+                                <td className="px-6 py-3 text-slate-600">{c.type}</td>
+                                <td className="px-6 py-3 text-slate-600">{c.description}</td>
+                                <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${c.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{c.status}</span></td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
+                                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredCategories.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-8 text-center text-slate-400">No categories found matching your criteria.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">{editingCategory ? 'Edit Category' : 'New Category'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                            
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Category Code <span className="text-red-500">*</span></label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. ITE"
+                                    value={formData.code}
+                                    onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})}
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Category Name <span className="text-red-500">*</span></label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. IT Equipment"
+                                    value={formData.name}
+                                    onChange={e => setFormData({...formData, name: e.target.value})}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={formData.type}
+                                    onChange={e => setFormData({...formData, type: e.target.value})}
+                                >
+                                    <option value="PPE">PPE</option>
+                                    <option value="Consumable">Consumable</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="e.g. Computers and Peripherals"
+                                    value={formData.description}
+                                    onChange={e => setFormData({...formData, description: e.target.value})}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <span className="text-sm font-medium text-slate-700">Active Status</span>
+                                <button onClick={() => setFormData({...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active'})} className="text-[#006400]">
+                                    {formData.status === 'Active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                                </button>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-3">
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
+                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Category</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+    const [formData, setFormData] = useState<any>({ 
+        article: '', 
+        description: '', 
+        unit: '', 
+        categoryId: '', 
+        status: 'Active' 
+    });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterCategory, setFilterCategory] = useState('All');
+    const [showInactive, setShowInactive] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleEdit = (item: CatalogItem) => {
+        setEditingItem(item);
+        setFormData({
+            article: item.article,
+            description: item.description,
+            unit: item.unit,
+            categoryId: item.categoryId,
+            status: item.status
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingItem(null);
+        setFormData({ 
+            article: '', 
+            description: '', 
+            unit: '', 
+            categoryId: '', 
+            status: 'Active' 
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to deactivate this item?')) {
+            const updated = catalog.map((c: CatalogItem) => c.id === id ? { ...c, status: 'Inactive' } : c);
+            setCatalog(updated);
+            if (onLog) onLog('Deactivated PPE Item', 'Master Data', `Deactivated item ID: ${id}`, id);
+        }
+    };
+
+    const handleSave = () => {
+        if (!formData.article || !formData.description || !formData.unit || !formData.categoryId) {
+            setError('All fields are required.');
+            return;
+        }
+
+        if (editingItem) {
+            const updated = catalog.map((c: CatalogItem) => c.id === editingItem.id ? { ...c, ...formData } : c);
+            setCatalog(updated);
+            if (onLog) onLog('Updated PPE Item', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
+        } else {
+            const newItem: CatalogItem = {
+                id: generateId(),
+                stockNumber: `PPE-${generateId()}`,
+                ...formData,
+                itemType: 'PPE',
+                quantity: 0, 
+                status: formData.status
+            };
+            setCatalog([...catalog, newItem]);
+            if (onLog) onLog('Created PPE Item', 'Master Data', `Created item: ${formData.article}`, newItem.id);
+        }
+        setIsModalOpen(false);
+    };
+
+    const filteredItems = catalog.filter((c: CatalogItem) => {
+        if (c.itemType !== 'PPE') return false;
+        const matchesSearch = c.article.toLowerCase().includes(searchTerm.toLowerCase()) || c.description.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = filterCategory === 'All' || c.categoryId === filterCategory;
+        const matchesStatus = showInactive ? true : c.status === 'Active';
+        return matchesSearch && matchesCategory && matchesStatus;
+    });
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                 <h1 className="text-2xl font-bold text-slate-800">PPE Catalog</h1>
+                 <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
+                    <Plus size={16}/> Add PPE Item
+                </button>
+            </div>
+
+            <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-wrap">
+                <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search article or description..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <select 
+                    className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                >
+                    <option value="All">All Categories</option>
+                    {categories
+                        .filter((c: AssetCategory) => c.type === 'PPE')
+                        .map((c: AssetCategory) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                </select>
+                <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
+                    {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
+                    {showInactive ? 'Showing Inactive' : 'Hide Inactive'}
+                </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Article</th>
+                            <th className="px-6 py-4">Description</th>
+                            <th className="px-6 py-4">Unit</th>
+                            <th className="px-6 py-4">Category</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredItems.map((c: CatalogItem) => (
+                            <tr key={c.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{c.article}</td>
+                                <td className="px-6 py-3 text-slate-600 max-w-xs truncate">{c.description}</td>
+                                <td className="px-6 py-3 text-slate-600">{c.unit}</td>
+                                <td className="px-6 py-3 text-slate-600">{categories.find((cat:any) => cat.id === c.categoryId)?.name || '-'}</td>
+                                <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${c.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{c.status}</span></td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
+                                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredItems.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-8 text-center text-slate-400">No PPE items found.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">{editingItem ? 'Edit PPE Item' : 'New PPE Item'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Article Name <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        placeholder="e.g. Laptop"
+                                        value={formData.article}
+                                        onChange={e => setFormData({...formData, article: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Unit <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        placeholder="e.g. unit"
+                                        value={formData.unit}
+                                        onChange={e => setFormData({...formData, unit: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Description <span className="text-red-500">*</span></label>
+                                <textarea 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="Full specifications..."
+                                    rows={2}
+                                    value={formData.description}
+                                    onChange={e => setFormData({...formData, description: e.target.value})}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Category (PPE Only) <span className="text-red-500">*</span></label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={formData.categoryId}
+                                    onChange={e => setFormData({...formData, categoryId: e.target.value})}
+                                >
+                                    <option value="">Select Category...</option>
+                                    {categories
+                                        .filter((c: AssetCategory) => c.status === 'Active' && c.type === 'PPE')
+                                        .map((c: AssetCategory) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <span className="text-sm font-medium text-slate-700">Active Status</span>
+                                <button onClick={() => setFormData({...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active'})} className="text-[#006400]">
+                                    {formData.status === 'Active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                                </button>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-3">
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
+                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save PPE Item</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+    const [formData, setFormData] = useState<any>({ 
+        article: '', 
+        description: '', 
+        unit: '', 
+        categoryId: '', 
+        status: 'Active' 
+    });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterCategory, setFilterCategory] = useState('All');
+    const [showInactive, setShowInactive] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleEdit = (item: CatalogItem) => {
+        setEditingItem(item);
+        setFormData({
+            article: item.article,
+            description: item.description,
+            unit: item.unit,
+            categoryId: item.categoryId,
+            status: item.status
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingItem(null);
+        setFormData({ 
+            article: '', 
+            description: '', 
+            unit: '', 
+            categoryId: '', 
+            status: 'Active' 
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to deactivate this item?')) {
+            const updated = catalog.map((c: CatalogItem) => c.id === id ? { ...c, status: 'Inactive' } : c);
+            setCatalog(updated);
+            if (onLog) onLog('Deactivated Consumable', 'Master Data', `Deactivated item ID: ${id}`, id);
+        }
+    };
+
+    const handleSave = () => {
+        if (!formData.article || !formData.description || !formData.unit || !formData.categoryId) {
+            setError('All fields are required.');
+            return;
+        }
+
+        if (editingItem) {
+            const updated = catalog.map((c: CatalogItem) => c.id === editingItem.id ? { ...c, ...formData } : c);
+            setCatalog(updated);
+            if (onLog) onLog('Updated Consumable', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
+        } else {
+            const newItem: CatalogItem = {
+                id: generateId(),
+                stockNumber: `SUP-${generateId()}`,
+                ...formData,
+                itemType: 'Consumable',
+                quantity: 0, 
+                status: formData.status
+            };
+            setCatalog([...catalog, newItem]);
+            if (onLog) onLog('Created Consumable', 'Master Data', `Created item: ${formData.article}`, newItem.id);
+        }
+        setIsModalOpen(false);
+    };
+
+    const filteredItems = catalog.filter((c: CatalogItem) => {
+        if (c.itemType !== 'Consumable') return false;
+        const matchesSearch = c.article.toLowerCase().includes(searchTerm.toLowerCase()) || c.description.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = filterCategory === 'All' || c.categoryId === filterCategory;
+        const matchesStatus = showInactive ? true : c.status === 'Active';
+        return matchesSearch && matchesCategory && matchesStatus;
+    });
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                 <h1 className="text-2xl font-bold text-slate-800">Consumables</h1>
+                 <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
+                    <Plus size={16}/> Add Consumable
+                </button>
+            </div>
+
+            <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-wrap">
+                <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search article or description..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <select 
+                    className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                >
+                    <option value="All">All Categories</option>
+                    {categories
+                        .filter((c: AssetCategory) => c.status === 'Active' && c.type === 'Consumable')
+                        .map((c: AssetCategory) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                </select>
+                <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
+                    {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
+                    {showInactive ? 'Showing Inactive' : 'Hide Inactive'}
+                </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Article</th>
+                            <th className="px-6 py-4">Description</th>
+                            <th className="px-6 py-4 text-center">On Hand</th>
+                            <th className="px-6 py-4">Unit</th>
+                            <th className="px-6 py-4">Category</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredItems.map((c: CatalogItem) => (
+                            <tr key={c.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{c.article}</td>
+                                <td className="px-6 py-3 text-slate-600 max-w-xs truncate">{c.description}</td>
+                                <td className="px-6 py-3 text-center">
+                                    <span className={`font-bold px-2 py-1 rounded ${c.quantity <= (c.reorderPoint || 0) ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-700'}`}>
+                                        {c.quantity}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3 text-slate-600">{c.unit}</td>
+                                <td className="px-6 py-3 text-slate-600">{categories.find((cat:any) => cat.id === c.categoryId)?.name || '-'}</td>
+                                <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${c.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{c.status}</span></td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
+                                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredItems.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-6 py-8 text-center text-slate-400">No consumable items found.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">{editingItem ? 'Edit Consumable' : 'New Consumable'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Article Name <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        placeholder="e.g. Bond Paper"
+                                        value={formData.article}
+                                        onChange={e => setFormData({...formData, article: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Unit <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        placeholder="e.g. ream"
+                                        value={formData.unit}
+                                        onChange={e => setFormData({...formData, unit: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Description <span className="text-red-500">*</span></label>
+                                <textarea 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                    placeholder="Full specifications..."
+                                    rows={2}
+                                    value={formData.description}
+                                    onChange={e => setFormData({...formData, description: e.target.value})}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Category <span className="text-red-500">*</span></label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={formData.categoryId}
+                                    onChange={e => setFormData({...formData, categoryId: e.target.value})}
+                                >
+                                    <option value="">Select Category...</option>
+                                    {categories
+                                        .filter((c: AssetCategory) => c.status === 'Active' && c.type === 'Consumable')
+                                        .map((c: AssetCategory) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <span className="text-sm font-medium text-slate-700">Active Status</span>
+                                <button onClick={() => setFormData({...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active'})} className="text-[#006400]">
+                                    {formData.status === 'Active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                                </button>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-3">
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
+                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Consumable</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [view, setView] = useState<ViewState>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Data State Initialization
+  const [inventory, setInventory] = useState(INITIAL_INVENTORY);
+  const [departments, setDepartments] = useState(INITIAL_DEPARTMENTS);
+  const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
+  const [locations, setLocations] = useState(INITIAL_LOCATIONS);
+  const [funds, setFunds] = useState(INITIAL_FUNDS);
+  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+  const [catalog, setCatalog] = useState(INITIAL_CATALOG);
+  const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS);
+  const [assets, setAssets] = useState(INITIAL_ASSETS);
+  const [mrs, setMrs] = useState(INITIAL_MRS);
+  const [audits, setAudits] = useState(INITIAL_AUDITS);
+  const [logs, setLogs] = useState(INITIAL_LOGS);
+  const [settings, setSettings] = useState(INITIAL_SETTINGS);
+  
+  // Asset Editing State
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  
+  // Active Audit Session
+  const [activeAudit, setActiveAudit] = useState<AuditSession | null>(null);
+  
+  // Helper for logging
+  const handleLog = (action: string, module: string, description: string, referenceId?: string) => {
+      const newLog: LogEntry = {
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          userId: 'E001',
+          username: 'Jeffrey Meneses',
+          role: 'Admin Officer V',
+          action,
+          module,
+          description,
+          referenceId: referenceId || '-'
+      };
+      setLogs([newLog, ...logs]);
+  };
+
+  if (!isAuthenticated) {
+      return <LandingPage onLogin={() => setIsAuthenticated(true)} />;
+  }
+
+  const renderContent = () => {
+      switch (view) {
+          case 'dashboard':
+              return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
+                            <div className="text-sm text-slate-500">Overview of Supply Office Operations</div>
+                        </div>
+                        <div className="text-sm bg-white px-3 py-1 rounded-full border border-slate-200 text-slate-500">
+                            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard 
+                            label="Total Asset Value" 
+                            value={formatCurrency(assets.reduce((sum, a) => sum + (a.unitValue * a.quantity), 0))} 
+                            icon={<Wallet />} 
+                            colorClass="bg-emerald-100 text-emerald-700"
+                            iconColorClass="text-emerald-700"
+                        />
+                        <StatCard 
+                            label="Total PPE Items" 
+                            value={assets.length} 
+                            icon={<Box />} 
+                            colorClass="bg-blue-100 text-blue-700"
+                            iconColorClass="text-blue-700"
+                        />
+                         <StatCard 
+                            label="Low Stock Alerts" 
+                            value={catalog.filter(c => c.itemType === 'Consumable' && c.quantity <= (c.reorderPoint || 0)).length} 
+                            icon={<AlertTriangle />} 
+                            colorClass="bg-red-100 text-red-700"
+                            iconColorClass="text-red-700"
+                            subtext="Reorder Needed"
+                        />
+                         <StatCard 
+                            label="Active Audits" 
+                            value={audits.filter(a => a.status === 'Draft').length} 
+                            icon={<ClipboardList />} 
+                            colorClass="bg-amber-100 text-amber-700"
+                            iconColorClass="text-amber-700"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-800 mb-6">Stock Movement Analytics</h3>
+                            <StockMovementChart transactions={transactions} departments={departments} />
+                        </div>
+                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                            <h3 className="text-lg font-bold text-slate-800 mb-6">Recent Activity</h3>
+                            <div className="flex-1 overflow-y-auto space-y-5 pr-2 custom-scrollbar max-h-[300px]">
+                                {logs.slice(0, 6).map(log => (
+                                    <div key={log.id} className="flex gap-3 relative pl-4 border-l-2 border-slate-100">
+                                        <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-300 ring-4 ring-white"></div>
+                                        <div>
+                                            <div className="text-sm font-medium text-slate-800">{log.action}</div>
+                                            <div className="text-xs text-slate-500 mb-1">{log.description}</div>
+                                            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{formatDateTime(log.timestamp)}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {logs.length === 0 && <div className="text-sm text-slate-400 text-center py-4">No recent activity.</div>}
+                            </div>
+                            <button onClick={() => setView('activity-logs')} className="mt-4 text-sm text-[#006400] font-medium hover:underline text-center w-full">View All Activity</button>
+                        </div>
+                    </div>
+                </div>
+              );
+          case 'activity-logs': return <ActivityLogView logs={logs} setLogs={setLogs} />;
+          case 'reports': return <ReportsModule assets={assets} catalog={catalog} transactions={transactions} audits={audits} departments={departments} locations={locations} categories={categories} />;
+          case 'settings': return <SettingsView settings={settings} setSettings={setSettings} onLog={handleLog} />;
+          
+          case 'asset-registry': 
+              return <AssetRegistryList 
+                  assets={assets} 
+                  setAssets={setAssets}
+                  departments={departments}
+                  locations={locations}
+                  catalog={catalog}
+                  employees={employees}
+                  onNavigate={(view: ViewState, asset?: Asset) => {
+                      if (view === 'asset-edit' && asset) {
+                          setEditingAsset(asset);
+                          setView('asset-new');
+                      } else {
+                          setEditingAsset(null);
+                          setView(view);
+                      }
+                  }}
+                  onLog={handleLog}
+              />;
+          case 'asset-new': 
+              return <AssetForm 
+                  onSave={(data: any) => { 
+                      if (editingAsset) {
+                          const updated = assets.map((a: Asset) => a.id === editingAsset.id ? { ...a, ...data, updatedAt: new Date().toISOString() } : a);
+                          setAssets(updated);
+                          handleLog('Updated Asset', 'Asset Registry', `Updated asset ${data.propertyNumber}`, editingAsset.id);
+                      } else {
+                          const newAsset = { ...data, id: generateId(), createdAt: new Date().toISOString() };
+                          setAssets([...assets, newAsset]);
+                          handleLog('Registered Asset', 'Asset Registry', `Registered new asset ${data.propertyNumber}`, newAsset.id);
+                      }
+                      setView('asset-registry'); 
+                  }} 
+                  onCancel={() => setView('asset-registry')} 
+                  assets={assets}
+                  catalog={catalog} 
+                  employees={employees} 
+                  departments={departments} 
+                  locations={locations} 
+                  funds={funds}
+                  initialData={editingAsset}
+              />;
+          case 'asset-detail': return <AssetDetail onBack={() => setView('asset-registry')} />;
+
+          case 'transactions-list': return <StockTransactionList transactions={transactions} onNavigate={setView} />;
+          case 'transactions-new': return <StockTransactionForm onSave={() => { setView('transactions-list'); handleLog('Recorded Transaction', 'Stock Transactions', 'Recorded new stock transaction'); }} onCancel={() => setView('transactions-list')} catalog={catalog} departments={departments} />;
+          case 'transactions-detail': return <StockTransactionDetail onBack={() => setView('transactions-list')} />;
+
+          case 'mr-list': return <MRListView mrs={mrs} onNavigate={setView} />;
+          case 'mr-new': return <MRForm onSave={() => { setView('mr-list'); handleLog('Issued MR', 'Memorandum Receipt', 'Issued new Memorandum Receipt'); }} onCancel={() => setView('mr-list')} employees={employees} />;
+          case 'mr-detail': return <MRDetail onBack={() => setView('mr-list')} />;
+
+          case 'audit-list': 
+              return <AuditList 
+                  audits={audits} 
+                  onNavigate={(view: ViewState, audit?: AuditSession) => {
+                      if (audit) setActiveAudit(audit);
+                      setView(view);
+                  }} 
+              />;
+          case 'audit-new': 
+              return <AuditNew 
+                  onCancel={() => setView('audit-list')} 
+                  onSave={(session: AuditSession) => {
+                      setAudits([session, ...audits]);
+                      setActiveAudit(session);
+                      handleLog('Created Audit', 'Physical Count', `Created session ${session.sessionId}`, session.id);
+                      setView('audit-detail');
+                  }}
+                  locations={locations}
+                  departments={departments}
+                  assets={assets}
+              />;
+          case 'audit-detail': 
+              if (!activeAudit) return <AuditList audits={audits} onNavigate={setView} />;
+              
+              if (activeAudit.status === 'Draft') {
+                  return <AuditWorksheet 
+                      audit={activeAudit} 
+                      onBack={() => setView('audit-list')} 
+                      onSaveDraft={(updated: AuditSession) => {
+                          const newAudits = audits.map(a => a.id === updated.id ? updated : a);
+                          setAudits(newAudits);
+                          setActiveAudit(updated);
+                          handleLog('Updated Audit', 'Physical Count', `Saved draft for ${updated.sessionId}`, updated.id);
+                      }}
+                      onFinalize={(final: AuditSession) => {
+                          const finalized = { ...final, status: 'Finalized', finalizedAt: new Date().toISOString() };
+                          const newAudits = audits.map(a => a.id === final.id ? finalized : a);
+                          setAudits(newAudits as AuditSession[]); // Cast due to status change
+                          setActiveAudit(finalized as AuditSession);
+                          handleLog('Finalized Audit', 'Physical Count', `Finalized session ${finalized.sessionId}`, finalized.id);
+                      }}
+                  />;
+              } else {
+                  return <AuditReport audit={activeAudit} onBack={() => setView('audit-list')} />;
+              }
+
+          case 'mdm-employees': return <EmployeeMasterView employees={employees} setEmployees={setEmployees} departments={departments} onLog={handleLog} />;
+          case 'mdm-departments': return <DepartmentMasterView departments={departments} setDepartments={setDepartments} locations={locations} onLog={handleLog} />;
+          case 'mdm-locations': return <LocationMasterView locations={locations} setLocations={setLocations} onLog={handleLog} />;
+          case 'mdm-funds': return <FundClusterMasterView funds={funds} setFunds={setFunds} onLog={handleLog} />;
+          case 'mdm-categories': return <CategoryMasterView categories={categories} setCategories={setCategories} onLog={handleLog} />;
+          case 'mdm-ppe': return <PPECatalogView catalog={catalog} setCatalog={setCatalog} categories={categories} onLog={handleLog} />;
+          case 'mdm-consumables': return <ConsumablesCatalogView catalog={catalog} setCatalog={setCatalog} categories={categories} onLog={handleLog} />;
+
+          default: return <div className="p-8 text-center text-slate-500">Page not found or under construction.</div>;
+      }
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden print:bg-white print:h-auto print:block">
+        <aside className={`bg-[#006400] text-white flex flex-col transition-all duration-300 print:hidden ${isSidebarCollapsed ? 'w-16' : 'w-64'} shadow-2xl z-20`}>
+             <div className="p-4 flex items-center justify-between border-b border-green-800/30 h-16 shrink-0">
+                {!isSidebarCollapsed && (
+                    <div className="flex items-center gap-2 font-bold text-lg tracking-tight whitespace-nowrap overflow-hidden">
+                        <div className="w-8 h-8 bg-white text-[#006400] rounded-lg flex items-center justify-center shadow-lg"><Box size={20} strokeWidth={2.5} /></div>
+                        <span>ESSU Inventory</span>
+                    </div>
+                )}
+                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 hover:bg-white/10 rounded-lg text-green-100 transition-colors mx-auto">
+                    {isSidebarCollapsed ? <Menu size={20} /> : <ChevronLeft size={20} />}
+                </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto py-4 space-y-6 custom-scrollbar">
+                <NavSection label="Overview" collapsed={isSidebarCollapsed}>
+                    <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} collapsed={isSidebarCollapsed} />
+                    <NavItem icon={<Activity size={20} />} label="Activity Logs" active={view === 'activity-logs'} onClick={() => setView('activity-logs')} collapsed={isSidebarCollapsed} />
+                    <NavItem icon={<BarChart3 size={20} />} label="Reports" active={view === 'reports'} onClick={() => setView('reports')} collapsed={isSidebarCollapsed} />
+                </NavSection>
+
+                <NavSection label="Operations" collapsed={isSidebarCollapsed}>
+                     <NavItem icon={<PackageSearch size={20} />} label="Asset Registry" active={view.startsWith('asset')} onClick={() => setView('asset-registry')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<ArrowRightLeft size={20} />} label="Transactions" active={view.startsWith('transactions')} onClick={() => setView('transactions-list')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<FileCheck size={20} />} label="Memorandum Receipts" active={view.startsWith('mr')} onClick={() => setView('mr-list')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<ClipboardList size={20} />} label="Physical Counts" active={view.startsWith('audit')} onClick={() => setView('audit-list')} collapsed={isSidebarCollapsed} />
+                </NavSection>
+
+                <NavSection label="Master Data" collapsed={isSidebarCollapsed}>
+                     <NavItem icon={<Users size={20} />} label="Employees" active={view === 'mdm-employees'} onClick={() => setView('mdm-employees')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<Building size={20} />} label="Departments" active={view === 'mdm-departments'} onClick={() => setView('mdm-departments')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<MapPin size={20} />} label="Locations" active={view === 'mdm-locations'} onClick={() => setView('mdm-locations')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<Wallet size={20} />} label="Fund Clusters" active={view === 'mdm-funds'} onClick={() => setView('mdm-funds')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<Tags size={20} />} label="Asset Categories" active={view === 'mdm-categories'} onClick={() => setView('mdm-categories')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<Monitor size={20} />} label="PPE Catalog" active={view === 'mdm-ppe'} onClick={() => setView('mdm-ppe')} collapsed={isSidebarCollapsed} />
+                     <NavItem icon={<ScrollText size={20} />} label="Consumables" active={view === 'mdm-consumables'} onClick={() => setView('mdm-consumables')} collapsed={isSidebarCollapsed} />
+                </NavSection>
+            </div>
+
+            <div className="p-4 border-t border-green-800/30 shrink-0 space-y-2">
+                <button onClick={() => setView('settings')} className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''} ${view === 'settings' ? 'bg-white/10 text-yellow-400' : ''}`}>
+                    <Settings size={20} />
+                    {!isSidebarCollapsed && <span>Settings</span>}
+                </button>
+                <button onClick={() => setIsAuthenticated(false)} className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+                    <LogOut size={20} />
+                    {!isSidebarCollapsed && <span>Sign Out</span>}
+                </button>
+            </div>
+        </aside>
+
+        <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+             <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10 print:hidden">
+                <div className="flex items-center gap-4">
+                     <h2 className="text-lg font-bold text-slate-700 hidden md:block">Supply Office Management System</h2>
+                </div>
+                <div className="flex items-center gap-4">
+                    <button className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
+                        <Bell size={20} />
+                        <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                    </button>
+                    <div className="h-8 w-px bg-slate-200 mx-1"></div>
+                    <div className="flex items-center gap-3">
+                        <div className="text-right hidden md:block">
+                            <div className="text-sm font-bold text-slate-800">Jeffrey Meneses</div>
+                            <div className="text-xs text-slate-500">Admin Officer V</div>
+                        </div>
+                        <div className="w-10 h-10 bg-[#006400] text-white rounded-full flex items-center justify-center font-bold shadow-lg shadow-green-900/20">JM</div>
+                    </div>
+                </div>
+            </header>
+
+            <div className="flex-1 overflow-auto p-6 md:p-8 print:p-0 print:overflow-visible custom-scrollbar">
+                <div className="max-w-7xl mx-auto print:max-w-none print:mx-0">
+                    {renderContent()}
+                </div>
+                <div className="mt-12 pt-6 border-t border-slate-200 text-center text-slate-400 text-xs print:hidden">
+                    &copy; 2025 Eastern Samar State University - Supply Office Inventory System
+                </div>
+            </div>
+        </main>
+    </div>
+  );
+}
 
 export default App;
