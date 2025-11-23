@@ -74,6 +74,48 @@ Dedicated reporting module with export/print capabilities:
 *   **Icons:** Lucide React
 *   **State Management:** Local State (Prototype) / In-Memory Mock Data
 
+## 🗄️ Backend (MySQL + Express/Prisma)
+A starter backend now lives in `server/` using Express, Prisma ORM, and MySQL.
+
+### Requirements
+- Node.js 18+
+- MySQL instance (create an empty database, e.g., `essu_inventory`)
+
+### Setup
+```bash
+cd server
+cp .env.example .env   # update DATABASE_URL/JWT_SECRET if needed
+npm install
+npx prisma generate
+npx prisma migrate dev --name init
+npm run seed           # loads the mock data from the existing frontend constants
+npm run dev            # starts API on http://localhost:4000
+```
+
+### Available endpoints (initial)
+- `GET /health`
+- `GET /api/departments`
+- `GET /api/locations`
+- `GET /api/funds`
+- `GET /api/categories`
+- `GET /api/employees`
+- `GET /api/catalog`
+- `GET /api/assets`
+- `POST /api/assets` (create)
+- `PUT /api/assets/:id` (update)
+- `GET /api/transactions`
+- `POST /api/transactions` (create)
+- `GET /api/mrs`
+- `POST /api/mrs` (create)
+- `GET /api/audits`
+- `POST /api/audits` (create)
+- `PUT /api/audits/:id` (update/finalize)
+
+> Note: The frontend still uses in-memory mock data. You can start wiring it to these endpoints by replacing the `INITIAL_*` state initializers with API calls.
+
+### Frontend -> Backend
+Create a `.env` in the project root with `VITE_API_BASE_URL=http://localhost:4000`, then run `npm run dev` from the root to have the frontend pull data from the backend.
+
 ## 📂 Project Structure
 *   `App.tsx`: Main application controller, routing, and all view components.
 *   `types.ts`: TypeScript interfaces for all data entities (Asset, Transaction, Audit, etc.).

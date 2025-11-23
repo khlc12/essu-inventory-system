@@ -17,6 +17,33 @@ import {
   INITIAL_NOTIFICATIONS
 } from './constants';
 import { 
+  bootstrapDataFromApi, 
+  createAsset, 
+  updateAsset,
+  createDepartment,
+  updateDepartment,
+  deactivateDepartment,
+  createLocation,
+  updateLocation,
+  deactivateLocation,
+  createFund,
+  updateFund,
+  deactivateFund,
+  createCategory,
+  updateCategory,
+  deactivateCategory,
+  createCatalogItem,
+  updateCatalogItem,
+  deactivateCatalogItem,
+  createEmployee,
+  updateEmployee,
+  deactivateEmployee,
+  createTransaction,
+  createMemorandumReceipt,
+  createAuditSession,
+  updateAuditSession
+} from './api';
+import { 
   InventoryItem, 
   AuditStatus, 
   ViewState,
@@ -828,7 +855,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
                                     </td>
                                     <td className="px-6 py-3 text-right">
                                         <div className="flex justify-end gap-2">
-                                            <button onClick={() => onNavigate('asset-detail')} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Details"><Eye size={16} /></button>
+                                            <button onClick={() => onNavigate('asset-detail', asset)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Details"><Eye size={16} /></button>
                                             <button onClick={() => handleEdit(asset)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Pencil size={16} /></button>
                                             <button onClick={() => handleDelete(asset.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded" title="Delete"><Trash2 size={16} /></button>
                                         </div>
@@ -848,7 +875,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
     );
 };
 
-const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, locations, funds, initialData }: any) => {
+const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, locations, funds, initialData, isSaving }: any) => {
     const [formData, setFormData] = useState({
         propertyNumber: '',
         dateAcquired: '',
@@ -893,7 +920,7 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
         }));
     };
 
-    const handleSaveAction = () => {
+    const handleSaveAction = async () => {
         // Validation
         if (!formData.propertyNumber || !formData.dateAcquired || !formData.catalogItemId || 
             !formData.unitValue || !formData.fundClusterId || !formData.departmentId || 
@@ -918,7 +945,12 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
             unitValue: parseFloat(formData.unitValue)
         };
         
-        onSave(assetData);
+        try {
+            setError('');
+            await onSave(assetData);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save asset.');
+        }
     };
 
     return (
@@ -1049,55 +1081,91 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                 )}
 
                 <div className="flex justify-end gap-3 pt-4">
-                    <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
-                    <button onClick={handleSaveAction} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00]">{initialData ? 'Update Asset' : 'Register Asset'}</button>
+                    <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" disabled={isSaving}>Cancel</button>
+                    <button onClick={handleSaveAction} disabled={isSaving} className={`px-6 py-2 rounded-lg text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>{isSaving ? 'Saving...' : initialData ? 'Update Asset' : 'Register Asset'}</button>
                 </div>
             </div>
         </div>
     );
 }
 
-const AssetDetail = ({ onBack }: any) => (
-    <div className="space-y-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Registry</button>
-        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
-            <div className="flex justify-between items-start mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Aircon Unit (Split Type)</h1>
-                    <div className="text-sm text-slate-500">Property No: 16-09-0630</div>
-                </div>
-                <span className="px-3 py-1 bg-green-100 text-[#006400] rounded-full text-sm font-medium">Active</span>
+const AssetDetail = ({ asset, catalog, departments, locations, employees, funds, onBack }: any) => {
+    if (!asset) {
+        return (
+            <div className="space-y-4">
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Registry</button>
+                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">Asset not found.</div>
             </div>
-            <div className="grid grid-cols-3 gap-8 mb-8">
-                <div>
-                    <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Location</div>
-                    <div className="font-medium text-slate-700">College of Education (Dean's Office)</div>
+        );
+    }
+
+    const item = catalog.find((c: CatalogItem) => c.id === asset.catalogItemId);
+    const dept = departments.find((d: Department) => d.id === asset.departmentId);
+    const loc = locations.find((l: Location) => l.id === asset.locationId);
+    const custodian = employees.find((e: Employee) => e.id === asset.custodianId);
+    const fund = funds.find((f: FundCluster) => f.id === asset.fundClusterId);
+
+    return (
+        <div className="space-y-6">
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Registry</button>
+            <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-start mb-6">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800">{item ? item.article : 'Asset Detail'}</h1>
+                        <div className="text-sm text-slate-500">Property No: {asset.propertyNumber}</div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${asset.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>{asset.status}</span>
                 </div>
-                <div>
-                    <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Custodian</div>
-                    <div className="font-medium text-slate-700">Arnel Balbin</div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Description</div>
+                        <div className="font-medium text-slate-700">{asset.description}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Custodian</div>
+                        <div className="font-medium text-slate-700">{getEmployeeFullName(custodian)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Location</div>
+                        <div className="font-medium text-slate-700">{loc ? loc.name : '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Department</div>
+                        <div className="font-medium text-slate-700">{dept ? dept.name : '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Fund Cluster</div>
+                        <div className="font-medium text-slate-700">{fund ? `${fund.code} - ${fund.name}` : '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Date Acquired</div>
+                        <div className="font-medium text-slate-700">{formatDate(asset.dateAcquired)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Unit Value</div>
+                        <div className="font-medium text-slate-700">{formatCurrency(asset.unitValue)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Quantity</div>
+                        <div className="font-medium text-slate-700">{asset.quantity ?? 1}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Catalog Item</div>
+                        <div className="font-medium text-slate-700">{item ? item.article : asset.catalogItemId}</div>
+                    </div>
                 </div>
-                 <div>
-                    <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Unit Value</div>
-                    <div className="font-medium text-slate-700">{formatCurrency(110000)}</div>
-                </div>
-            </div>
-            <div className="border-t border-slate-100 pt-6">
-                 <h3 className="font-bold text-slate-800 mb-4">History</h3>
-                 <div className="space-y-4">
-                     <div className="flex gap-4 text-sm">
-                         <div className="text-slate-500 w-24">2023-12-15</div>
-                         <div className="text-slate-700">Verified in Annual Physical Count (Matched)</div>
-                     </div>
-                     <div className="flex gap-4 text-sm">
-                         <div className="text-slate-500 w-24">2016-09-26</div>
-                         <div className="text-slate-700">Acquired via Purchase Order PO-16-005</div>
-                     </div>
-                 </div>
+
+                {asset.remarks && (
+                    <div className="border-t border-slate-100 pt-4">
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Remarks</div>
+                        <div className="text-slate-700">{asset.remarks}</div>
+                    </div>
+                )}
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 // --- Transaction Modules ---
 const StockTransactionList = ({ transactions, onNavigate }: any) => (
@@ -1120,7 +1188,7 @@ const StockTransactionList = ({ transactions, onNavigate }: any) => (
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                     {transactions.map((t: Transaction) => (
-                        <tr key={t.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('transactions-detail')}>
+                        <tr key={t.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('transactions-detail', t)}>
                             <td className="px-6 py-3 font-medium text-[#006400]">{t.transactionId}</td>
                             <td className="px-6 py-3"><span className={`flex items-center gap-2 ${t.type === 'Stock In' ? 'text-green-600' : 'text-amber-600'}`}>{t.type === 'Stock In' ? <ArrowDownLeft size={16}/> : <ArrowUpRight size={16}/>} {t.type}</span></td>
                             <td className="px-6 py-3 text-slate-500">{formatDate(t.date)}</td>
@@ -1133,8 +1201,13 @@ const StockTransactionList = ({ transactions, onNavigate }: any) => (
     </div>
 );
 
-const StockTransactionForm = ({ onCancel, onSave, catalog, departments }: any) => {
+const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving }: any) => {
+    const [type, setType] = useState<TransactionType>('Stock In');
+    const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+    const [departmentId, setDepartmentId] = useState<string>('');
+    const [remarks, setRemarks] = useState<string>('');
     const [lineItems, setLineItems] = useState<any[]>([]);
+    const [error, setError] = useState<string>('');
 
     const addItem = () => {
         setLineItems([...lineItems, { id: Date.now(), catalogItemId: '', quantity: 1, remarks: '' }]);
@@ -1150,6 +1223,31 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments }: any) =
          setLineItems(lineItems.filter((_, i) => i !== index));
     };
 
+    const handleSave = () => {
+        if (!departmentId || !date || !type) {
+            setError('Please fill in Transaction Type, Date, and Department.');
+            return;
+        }
+        if (lineItems.length === 0) {
+            setError('Add at least one line item.');
+            return;
+        }
+        for (const item of lineItems) {
+            if (!item.catalogItemId || !item.quantity || item.quantity <= 0) {
+                setError('Each line item needs an item and a quantity greater than 0.');
+                return;
+            }
+        }
+        setError('');
+        onSave({
+            type,
+            date,
+            departmentId,
+            items: lineItems.map((i: any) => ({ catalogItemId: i.catalogItemId, quantity: i.quantity, remarks: i.remarks })),
+            remarks,
+        });
+    };
+
     return (
     <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center gap-4 mb-6">
@@ -1157,25 +1255,30 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments }: any) =
              <h1 className="text-2xl font-bold text-slate-800">New Stock Transaction</h1>
         </div>
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+             {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
              <div className="grid grid-cols-2 gap-4">
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Transaction Type</label>
-                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]">
-                        <option>Stock In</option>
-                        <option>Stock Out</option>
+                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
+                        <option value="Stock In">Stock In</option>
+                        <option value="Stock Out">Stock Out</option>
                     </select>
                  </div>
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
-                    <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" defaultValue={new Date().toISOString().split('T')[0]} />
+                    <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={date} onChange={(e) => setDate(e.target.value)} />
                  </div>
              </div>
              <div>
                  <label className="block text-sm font-medium text-slate-700 mb-1">Department / Source</label>
-                 <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]">
-                     <option>Select Department...</option>
+                 <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+                     <option value="">Select Department...</option>
                      {departments.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                  </select>
+             </div>
+             <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Remarks</label>
+                <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional notes" />
              </div>
              <div className="pt-4 border-t border-slate-100">
                  <div className="flex justify-between items-center mb-4">
@@ -1228,67 +1331,92 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments }: any) =
                  )}
              </div>
              <div className="flex justify-end gap-3 pt-4">
-                <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
-                <button onClick={onSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00]">Save Transaction</button>
+                <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" disabled={isSaving}>Cancel</button>
+                <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>{isSaving ? 'Saving...' : 'Save Transaction'}</button>
             </div>
         </div>
     </div>
     );
 };
 
-const StockTransactionDetail = ({ onBack }: any) => (
-    <div className="space-y-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Transactions</button>
-        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm print:shadow-none print:border-none">
-            <ESSUHeader />
-            <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-200">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Stock In Transaction</h1>
-                    <div className="text-slate-500">ID: TXN-2024-001</div>
-                </div>
-                <div className="text-right">
-                    <div className="text-sm text-slate-500">Date</div>
-                    <div className="font-semibold text-slate-800">Jan 15, 2024</div>
-                </div>
+const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: any) => {
+    if (!transaction) {
+        return (
+            <div className="space-y-4">
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Transactions</button>
+                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">Transaction not found.</div>
             </div>
-            <table className="w-full text-sm text-left mb-8">
-                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                    <tr>
-                        <th className="px-4 py-2">Item</th>
-                        <th className="px-4 py-2">Description</th>
-                        <th className="px-4 py-2 text-right">Qty</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    <tr>
-                        <td className="px-4 py-2 font-medium">Bond Paper</td>
-                        <td className="px-4 py-2 text-slate-500">A4, Sub 20</td>
-                        <td className="px-4 py-2 text-right font-bold">100</td>
-                    </tr>
-                </tbody>
-            </table>
-            
-            <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
-                 <div className="text-center">
-                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                     <div className="text-xs font-bold uppercase">Requested By</div>
-                 </div>
-                 <div className="text-center">
-                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                     <div className="text-xs font-bold uppercase">Approved By</div>
-                 </div>
-                 <div className="text-center">
-                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                     <div className="text-xs font-bold uppercase">Received By</div>
-                 </div>
-            </div>
+        );
+    }
 
-            <div className="flex justify-end gap-3 print:hidden mt-8">
-                <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print</button>
+    const dept = departments.find((d: Department) => d.id === transaction.departmentId);
+
+    return (
+        <div className="space-y-6">
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Transactions</button>
+            <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm print:shadow-none print:border-none">
+                <ESSUHeader />
+                <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-200">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800">{transaction.type} Transaction</h1>
+                        <div className="text-slate-500">ID: {transaction.transactionId}</div>
+                        <div className="text-slate-500">Department: {dept ? dept.name : transaction.departmentId}</div>
+                        {transaction.remarks && <div className="text-slate-500">Remarks: {transaction.remarks}</div>}
+                    </div>
+                    <div className="text-right">
+                        <div className="text-sm text-slate-500">Date</div>
+                        <div className="font-semibold text-slate-800">{formatDate(transaction.date)}</div>
+                    </div>
+                </div>
+                <table className="w-full text-sm text-left mb-8">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-4 py-2">Item</th>
+                            <th className="px-4 py-2">Description</th>
+                            <th className="px-4 py-2 text-right">Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {transaction.items?.map((item: TransactionItem) => {
+                            const catItem = catalog.find((c: CatalogItem) => c.id === item.catalogItemId);
+                            return (
+                                <tr key={item.id}>
+                                    <td className="px-4 py-2 font-medium">{catItem ? catItem.article : item.catalogItemId}</td>
+                                    <td className="px-4 py-2 text-slate-500">{catItem ? catItem.description : '-'}</td>
+                                    <td className="px-4 py-2 text-right font-bold">{item.quantity}</td>
+                                </tr>
+                            );
+                        })}
+                        {!transaction.items?.length && (
+                            <tr>
+                                <td colSpan={3} className="px-4 py-3 text-center text-slate-400">No items recorded.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+                
+                <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                         <div className="text-xs font-bold uppercase">Requested By</div>
+                     </div>
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                         <div className="text-xs font-bold uppercase">Approved By</div>
+                     </div>
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                         <div className="text-xs font-bold uppercase">Received By</div>
+                     </div>
+                </div>
+
+                <div className="flex justify-end gap-3 print:hidden mt-8">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print</button>
+                </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 // --- MR Modules ---
 const MRListView = ({ mrs, onNavigate }: any) => (
@@ -1310,7 +1438,7 @@ const MRListView = ({ mrs, onNavigate }: any) => (
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                     {mrs.map((m: MemorandumReceipt) => (
-                        <tr key={m.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('mr-detail')}>
+                        <tr key={m.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('mr-detail', m)}>
                             <td className="px-6 py-3 font-medium text-[#006400]">{m.mrNumber}</td>
                             <td className="px-6 py-3 text-slate-500">{formatDate(m.dateIssued)}</td>
                              <td className="px-6 py-3"><span className="px-2 py-1 bg-green-100 text-[#006400] rounded-full text-xs font-medium">{m.status}</span></td>
@@ -1322,95 +1450,160 @@ const MRListView = ({ mrs, onNavigate }: any) => (
     </div>
 );
 
-const MRForm = ({ onCancel, onSave, employees }: any) => (
+const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
+    const [dateIssued, setDateIssued] = useState(new Date().toISOString().slice(0, 10));
+    const [employeeId, setEmployeeId] = useState('');
+    const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+    const [error, setError] = useState('');
+
+    const availableAssets = assets.filter((a: Asset) => a.status === 'Active');
+
+    const toggleAsset = (id: string) => {
+        setSelectedAssetIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        );
+    };
+
+    const handleSubmit = async () => {
+        if (!dateIssued || !employeeId || selectedAssetIds.length === 0) {
+            setError('Date, custodian, and at least one asset are required.');
+            return;
+        }
+        setError('');
+        const items = selectedAssetIds
+            .map((id) => assets.find((a: Asset) => a.id === id))
+            .filter(Boolean)
+            .map((asset: any) => ({
+                assetId: asset.id,
+                propertyNumber: asset.propertyNumber,
+                description: asset.description,
+                unitValue: asset.unitValue,
+            }));
+        await onSave({
+            dateIssued,
+            employeeId,
+            departmentId: employees.find((e: Employee) => e.id === employeeId)?.departmentId || '',
+            items,
+            status: 'Active',
+        }).catch((err: any) => setError(err?.message || 'Failed to issue MR.'));
+    };
+
+    return (
      <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center gap-4 mb-6">
              <button onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={20} /></button>
              <h1 className="text-2xl font-bold text-slate-800">Issue Memorandum Receipt</h1>
         </div>
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+             {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
              <div className="grid grid-cols-2 gap-4">
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Date Issued</label>
-                    <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" />
+                    <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={dateIssued} onChange={(e) => setDateIssued(e.target.value)} />
                  </div>
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Custodian</label>
-                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]">
-                         <option>Select Employee...</option>
+                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+                         <option value="">Select Employee...</option>
                          {employees.map((e:any) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
                     </select>
                  </div>
              </div>
              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Select Available Assets</label>
-                <div className="border border-slate-200 rounded-lg max-h-60 overflow-y-auto bg-slate-50 p-2">
-                    {/* Placeholder for filtered active assets */}
-                    <div className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded mb-2">
-                         <input type="checkbox" className="w-4 h-4 text-[#006400] rounded focus:ring-[#006400]" />
-                         <div className="text-sm">
-                             <div className="font-medium">19-05-1001 - Laptop (Dell)</div>
-                             <div className="text-xs text-slate-500">Value: 45,000.00</div>
-                         </div>
-                    </div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Select Assets to Issue</label>
+                <div className="border border-slate-200 rounded-lg max-h-60 overflow-y-auto bg-slate-50 p-2 space-y-2">
+                    {availableAssets.map((asset: Asset) => (
+                        <label key={asset.id} className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded cursor-pointer hover:border-[#006400]">
+                            <input type="checkbox" className="w-4 h-4 text-[#006400] rounded focus:ring-[#006400]" checked={selectedAssetIds.includes(asset.id)} onChange={() => toggleAsset(asset.id)} />
+                            <div className="text-sm">
+                                <div className="font-medium">{asset.propertyNumber} - {asset.description}</div>
+                                <div className="text-xs text-slate-500">Value: {formatCurrency(asset.unitValue)}</div>
+                            </div>
+                        </label>
+                    ))}
+                    {availableAssets.length === 0 && <div className="text-slate-400 text-sm p-4 text-center">No active assets available.</div>}
                 </div>
              </div>
              <div className="flex justify-end gap-3 pt-4">
-                <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
-                <button onClick={onSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00]">Issue MR</button>
+                <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" disabled={isSaving}>Cancel</button>
+                <button onClick={handleSubmit} disabled={isSaving} className={`px-6 py-2 rounded-lg text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>{isSaving ? 'Issuing...' : 'Issue MR'}</button>
             </div>
         </div>
     </div>
-);
+    );
+};
 
-const MRDetail = ({ onBack }: any) => (
-     <div className="space-y-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to MR List</button>
-        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
-             <ESSUHeader />
-             <h1 className="text-center text-xl font-bold uppercase mb-8">Memorandum Receipt for Property, Plant and Equipment</h1>
-             <div className="grid grid-cols-2 gap-8 text-sm mb-6">
-                 <div>
-                     <span className="font-semibold">MR Number:</span> MR-2016-085
-                 </div>
-                 <div className="text-right">
-                     <span className="font-semibold">Date:</span> Sept 26, 2016
-                 </div>
-             </div>
-             <table className="w-full text-sm text-left border border-slate-300 mb-8">
-                <thead className="bg-slate-100 text-slate-800 font-semibold">
-                    <tr>
-                        <th className="px-4 py-2 border border-slate-300">Property No.</th>
-                        <th className="px-4 py-2 border border-slate-300">Description</th>
-                        <th className="px-4 py-2 border border-slate-300 text-right">Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                         <td className="px-4 py-2 border border-slate-300">16-09-0630</td>
-                         <td className="px-4 py-2 border border-slate-300">Aircon Unit, 3HP</td>
-                         <td className="px-4 py-2 border border-slate-300 text-right">110,000.00</td>
-                    </tr>
-                </tbody>
-             </table>
-             <div className="grid grid-cols-2 gap-20 mt-12 print:block print:grid-cols-2">
-                 <div className="text-center">
-                     <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
-                     <div className="text-sm font-bold uppercase">Received By</div>
-                     <div className="text-xs">Signature over Printed Name</div>
-                 </div>
-                 <div className="text-center">
-                     <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
-                     <div className="text-sm font-bold uppercase">Issued By</div>
-                     <div className="text-xs">Supply Officer</div>
-                 </div>
+const MRDetail = ({ mr, employees, departments, onBack }: any) => {
+    if (!mr) {
+        return (
+            <div className="space-y-4">
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to MR List</button>
+                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">MR not found.</div>
             </div>
-             <div className="flex justify-end gap-3 print:hidden mt-8">
-                <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print MR</button>
+        );
+    }
+
+    const emp = employees.find((e: Employee) => e.id === mr.employeeId);
+    const dept = departments.find((d: Department) => d.id === mr.departmentId);
+
+    return (
+         <div className="space-y-6">
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to MR List</button>
+            <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+                 <ESSUHeader />
+                 <h1 className="text-center text-xl font-bold uppercase mb-8">Memorandum Receipt for Property, Plant and Equipment</h1>
+                 <div className="grid grid-cols-2 gap-8 text-sm mb-6">
+                     <div>
+                         <span className="font-semibold">MR Number:</span> {mr.mrNumber}
+                     </div>
+                     <div className="text-right">
+                         <span className="font-semibold">Date:</span> {formatDate(mr.dateIssued)}
+                     </div>
+                     <div><span className="font-semibold">Custodian:</span> {getEmployeeFullName(emp)}</div>
+                     <div className="text-right"><span className="font-semibold">Department:</span> {dept ? dept.name : mr.departmentId}</div>
+                 </div>
+                 <table className="w-full text-sm text-left border border-slate-300 mb-8">
+                    <thead className="bg-slate-100 text-slate-800 font-semibold">
+                        <tr>
+                            <th className="px-4 py-2 border border-slate-300">Property No.</th>
+                            <th className="px-4 py-2 border border-slate-300">Description</th>
+                            <th className="px-4 py-2 border border-slate-300 text-right">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {mr.items?.map((item: MRItem) => (
+                            <tr key={item.assetId}>
+                                 <td className="px-4 py-2 border border-slate-300">{item.propertyNumber}</td>
+                                 <td className="px-4 py-2 border border-slate-300">{item.description}</td>
+                                 <td className="px-4 py-2 border border-slate-300 text-right">{formatCurrency(item.unitValue)}</td>
+                            </tr>
+                        ))}
+                        {!mr.items?.length && (
+                            <tr>
+                                <td colSpan={3} className="px-4 py-3 text-center text-slate-400 border border-slate-300">No items.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                 </table>
+                 <div className="grid grid-cols-2 gap-20 mt-12 print:block print:grid-cols-2">
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                         <div className="text-sm font-bold uppercase">Received By</div>
+                         <div className="text-xs">Signature over Printed Name</div>
+                     </div>
+                     <div className="text-center">
+                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                         <div className="text-sm font-bold uppercase">Issued By</div>
+                         <div className="text-xs">Supply Officer</div>
+                     </div>
+                </div>
+                 <div className="flex justify-end gap-3 print:hidden mt-8">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print MR</button>
+                </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 // --- Audit Modules ---
 const AuditList = ({ audits, onNavigate }: any) => (
@@ -1451,7 +1644,7 @@ const AuditList = ({ audits, onNavigate }: any) => (
     </div>
 );
 
-const AuditNew = ({ onCancel, onSave, locations, departments, assets }: any) => {
+const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }: any) => {
     const [sessionId] = useState(`PC-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`);
     const [description, setDescription] = useState('');
     const [selectedLoc, setSelectedLoc] = useState('');
@@ -1563,9 +1756,9 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets }: any) => 
                 </div>
 
                 <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
-                    <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">Cancel</button>
-                    <button onClick={handleStart} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] flex items-center gap-2">
-                        Start Counting <ArrowRightLeft size={16} />
+                    <button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" disabled={isSaving}>Cancel</button>
+                    <button onClick={handleStart} disabled={isSaving} className={`px-6 py-2 rounded-lg text-white flex items-center gap-2 ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                        {isSaving ? 'Saving...' : <>Start Counting <ArrowRightLeft size={16} /></>}
                     </button>
                 </div>
             </div>
@@ -1848,6 +2041,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any
     const [filterDept, setFilterDept] = useState('All');
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleEdit = (emp: Employee) => {
         setEditingEmployee(emp);
@@ -1871,15 +2065,18 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to deactivate this employee?')) {
-            const updated = employees.map((e: Employee) => e.id === id ? { ...e, status: 'Inactive', updatedAt: new Date().toISOString() } : e);
-            setEmployees(updated);
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to deactivate this employee?')) return;
+        try {
+            const updatedEmp = await deactivateEmployee(id);
+            setEmployees(employees.map((e: Employee) => e.id === id ? updatedEmp : e));
             if (onLog) onLog('Deactivated Employee', 'Master Data', `Deactivated employee ID: ${id}`, id);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to deactivate employee.');
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.employeeId || !formData.firstName || !formData.lastName || !formData.departmentId) {
             setError('Employee ID, First Name, Last Name, and Department are required.');
             return;
@@ -1891,24 +2088,24 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any
             return;
         }
 
-        const timestamp = new Date().toISOString();
-
-        if (editingEmployee) {
-            const updated = employees.map((e: Employee) => e.id === editingEmployee.id ? { ...e, ...formData, updatedAt: timestamp } : e);
-            setEmployees(updated);
-            if (onLog) onLog('Updated Employee', 'Master Data', `Updated employee: ${formData.employeeId}`, editingEmployee.id);
-        } else {
-            const newEmp: Employee = {
-                id: generateId(),
-                ...formData,
-                status: formData.status as 'Active' | 'Inactive',
-                createdAt: timestamp,
-                updatedAt: timestamp
-            };
-            setEmployees([...employees, newEmp]);
-            if (onLog) onLog('Created Employee', 'Master Data', `Created employee: ${formData.employeeId}`, newEmp.id);
+        setIsSaving(true);
+        setError('');
+        try {
+            if (editingEmployee) {
+                const updated = await updateEmployee(editingEmployee.id, formData);
+                setEmployees(employees.map((e: Employee) => e.id === editingEmployee.id ? updated : e));
+                if (onLog) onLog('Updated Employee', 'Master Data', `Updated employee: ${formData.employeeId}`, editingEmployee.id);
+            } else {
+                const created = await createEmployee(formData);
+                setEmployees([...employees, created]);
+                if (onLog) onLog('Created Employee', 'Master Data', `Created employee: ${formData.employeeId}`, created.id);
+            }
+            setIsModalOpen(false);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save employee.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsModalOpen(false);
     };
 
     const filteredEmployees = employees.filter((e: Employee) => {
@@ -2074,8 +2271,10 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any
                             </div>
 
                             <div className="pt-2 flex justify-end gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
-                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Employee</button>
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
+                                <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                                    {isSaving ? 'Saving...' : 'Save Employee'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -2092,6 +2291,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }:
     const [searchTerm, setSearchTerm] = useState('');
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleEdit = (dept: Department) => {
         setEditingDept(dept);
@@ -2113,15 +2313,18 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }:
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to deactivate this department?')) {
-            const updated = departments.map((d: Department) => d.id === id ? { ...d, status: 'Inactive', updatedAt: new Date().toISOString() } : d);
-            setDepartments(updated);
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to deactivate this department?')) return;
+        try {
+            const updatedDept = await deactivateDepartment(id);
+            setDepartments(departments.map((d: Department) => d.id === id ? updatedDept : d));
             if (onLog) onLog('Deactivated Department', 'Master Data', `Deactivated department ID: ${id}`, id);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to deactivate department.');
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         // Validation
         if (!formData.code || !formData.name || !formData.locationId) {
             setError('Code, Name, and Location are required.');
@@ -2135,24 +2338,24 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }:
         if (isCodeDuplicate) { setError('Department Code must be unique.'); return; }
         if (isNameDuplicate) { setError('Department Name must be unique.'); return; }
 
-        const timestamp = new Date().toISOString();
-
-        if (editingDept) {
-            const updated = departments.map((d: Department) => d.id === editingDept.id ? { ...d, ...formData, updatedAt: timestamp } : d);
-            setDepartments(updated);
-            if (onLog) onLog('Updated Department', 'Master Data', `Updated department: ${formData.code}`, editingDept.id);
-        } else {
-            const newDept: Department = {
-                id: generateId(),
-                ...formData,
-                status: formData.status as 'Active' | 'Inactive',
-                createdAt: timestamp,
-                updatedAt: timestamp
-            };
-            setDepartments([...departments, newDept]);
-            if (onLog) onLog('Created Department', 'Master Data', `Created department: ${formData.code}`, newDept.id);
+        setIsSaving(true);
+        setError('');
+        try {
+            if (editingDept) {
+                const updated = await updateDepartment(editingDept.id, formData);
+                setDepartments(departments.map((d: Department) => d.id === editingDept.id ? updated : d));
+                if (onLog) onLog('Updated Department', 'Master Data', `Updated department: ${formData.code}`, editingDept.id);
+            } else {
+                const created = await createDepartment(formData);
+                setDepartments([...departments, created]);
+                if (onLog) onLog('Created Department', 'Master Data', `Created department: ${formData.code}`, created.id);
+            }
+            setIsModalOpen(false);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save department.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsModalOpen(false);
     };
 
     const filteredDepartments = departments.filter((d: Department) => {
@@ -2291,8 +2494,10 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }:
                             </div>
 
                             <div className="pt-2 flex justify-end gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
-                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Department</button>
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
+                                <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                                    {isSaving ? 'Saving...' : 'Save Department'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -2309,6 +2514,7 @@ const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleEdit = (loc: Location) => {
         setEditingLoc(loc);
@@ -2329,15 +2535,18 @@ const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to deactivate this location?')) {
-            const updated = locations.map((l: Location) => l.id === id ? { ...l, status: 'Inactive', updatedAt: new Date().toISOString() } : l);
-            setLocations(updated);
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to deactivate this location?')) return;
+        try {
+            const updatedLoc = await deactivateLocation(id);
+            setLocations(locations.map((l: Location) => l.id === id ? updatedLoc : l));
             if (onLog) onLog('Deactivated Location', 'Master Data', `Deactivated location ID: ${id}`, id);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to deactivate location.');
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         // Validation
         if (!formData.code || !formData.name) {
             setError('Code and Name are required.');
@@ -2351,24 +2560,24 @@ const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
         if (isCodeDuplicate) { setError('Location Code must be unique.'); return; }
         if (isNameDuplicate) { setError('Location Name must be unique.'); return; }
 
-        const timestamp = new Date().toISOString();
-
-        if (editingLoc) {
-            const updated = locations.map((l: Location) => l.id === editingLoc.id ? { ...l, ...formData, updatedAt: timestamp } : l);
-            setLocations(updated);
-            if (onLog) onLog('Updated Location', 'Master Data', `Updated location: ${formData.code}`, editingLoc.id);
-        } else {
-            const newLoc: Location = {
-                id: generateId(),
-                ...formData,
-                status: formData.status as 'Active' | 'Inactive',
-                createdAt: timestamp,
-                updatedAt: timestamp
-            };
-            setLocations([...locations, newLoc]);
-            if (onLog) onLog('Created Location', 'Master Data', `Created location: ${formData.code}`, newLoc.id);
+        setIsSaving(true);
+        setError('');
+        try {
+            if (editingLoc) {
+                const updated = await updateLocation(editingLoc.id, formData);
+                setLocations(locations.map((l: Location) => l.id === editingLoc.id ? updated : l));
+                if (onLog) onLog('Updated Location', 'Master Data', `Updated location: ${formData.code}`, editingLoc.id);
+            } else {
+                const created = await createLocation(formData);
+                setLocations([...locations, created]);
+                if (onLog) onLog('Created Location', 'Master Data', `Created location: ${formData.code}`, created.id);
+            }
+            setIsModalOpen(false);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save location.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsModalOpen(false);
     };
 
     const filteredLocations = locations.filter((l: Location) => {
@@ -2491,8 +2700,10 @@ const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
                         </div>
 
                         <div className="pt-2 flex justify-end gap-3">
-                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
-                            <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Location</button>
+                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
+                            <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                                {isSaving ? 'Saving...' : 'Save Location'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -2509,6 +2720,7 @@ const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleEdit = (fund: FundCluster) => {
         setEditingFund(fund);
@@ -2529,15 +2741,18 @@ const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to deactivate this fund cluster?')) {
-            const updated = funds.map((f: FundCluster) => f.id === id ? { ...f, status: 'Inactive', updatedAt: new Date().toISOString() } : f);
-            setFunds(updated);
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to deactivate this fund cluster?')) return;
+        try {
+            const updatedFund = await deactivateFund(id);
+            setFunds(funds.map((f: FundCluster) => f.id === id ? updatedFund : f));
             if (onLog) onLog('Deactivated Fund Cluster', 'Master Data', `Deactivated fund cluster ID: ${id}`, id);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to deactivate fund cluster.');
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.code || !formData.name) {
             setError('Code and Name are required.');
             return;
@@ -2549,24 +2764,24 @@ const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
         if (isCodeDuplicate) { setError('Fund Cluster Code must be unique.'); return; }
         if (isNameDuplicate) { setError('Fund Cluster Name must be unique.'); return; }
 
-        const timestamp = new Date().toISOString();
-
-        if (editingFund) {
-            const updated = funds.map((f: FundCluster) => f.id === editingFund.id ? { ...f, ...formData, updatedAt: timestamp } : f);
-            setFunds(updated);
-            if (onLog) onLog('Updated Fund Cluster', 'Master Data', `Updated fund cluster: ${formData.code}`, editingFund.id);
-        } else {
-            const newFund: FundCluster = {
-                id: generateId(),
-                ...formData,
-                status: formData.status as 'Active' | 'Inactive',
-                createdAt: timestamp,
-                updatedAt: timestamp
-            };
-            setFunds([...funds, newFund]);
-            if (onLog) onLog('Created Fund Cluster', 'Master Data', `Created fund cluster: ${formData.code}`, newFund.id);
+        setIsSaving(true);
+        setError('');
+        try {
+            if (editingFund) {
+                const updated = await updateFund(editingFund.id, formData);
+                setFunds(funds.map((f: FundCluster) => f.id === editingFund.id ? updated : f));
+                if (onLog) onLog('Updated Fund Cluster', 'Master Data', `Updated fund cluster: ${formData.code}`, editingFund.id);
+            } else {
+                const created = await createFund(formData);
+                setFunds([...funds, created]);
+                if (onLog) onLog('Created Fund Cluster', 'Master Data', `Created fund cluster: ${formData.code}`, created.id);
+            }
+            setIsModalOpen(false);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save fund cluster.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsModalOpen(false);
     };
 
     const filteredFunds = funds.filter((f: FundCluster) => {
@@ -2689,8 +2904,10 @@ const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
                             </div>
 
                             <div className="pt-2 flex justify-end gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
-                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Fund Cluster</button>
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
+                                <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                                    {isSaving ? 'Saving...' : 'Save Fund Cluster'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -2728,15 +2945,18 @@ const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to deactivate this category?')) {
-            const updated = categories.map((c: AssetCategory) => c.id === id ? { ...c, status: 'Inactive', updatedAt: new Date().toISOString() } : c);
-            setCategories(updated);
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to deactivate this category?')) return;
+        try {
+            const updatedCat = await deactivateCategory(id);
+            setCategories(categories.map((c: AssetCategory) => c.id === id ? updatedCat : c));
             if (onLog) onLog('Deactivated Category', 'Master Data', `Deactivated category ID: ${id}`, id);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to deactivate category.');
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.code || !formData.name) {
             setError('Code and Name are required.');
             return;
@@ -2748,25 +2968,24 @@ const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
         if (isCodeDuplicate) { setError('Category Code must be unique.'); return; }
         if (isNameDuplicate) { setError('Category Name must be unique.'); return; }
 
-        const timestamp = new Date().toISOString();
-
-        if (editingCategory) {
-            const updated = categories.map((c: AssetCategory) => c.id === editingCategory.id ? { ...c, ...formData, updatedAt: timestamp } : c);
-            setCategories(updated);
-            if (onLog) onLog('Updated Category', 'Master Data', `Updated category: ${formData.code}`, editingCategory.id);
-        } else {
-            const newCat: AssetCategory = {
-                id: generateId(),
-                ...formData,
-                status: formData.status as 'Active' | 'Inactive',
-                type: formData.type as any,
-                createdAt: timestamp,
-                updatedAt: timestamp
-            };
-            setCategories([...categories, newCat]);
-            if (onLog) onLog('Created Category', 'Master Data', `Created category: ${formData.code}`, newCat.id);
+        setIsSaving(true);
+        setError('');
+        try {
+            if (editingCategory) {
+                const updated = await updateCategory(editingCategory.id, formData);
+                setCategories(categories.map((c: AssetCategory) => c.id === editingCategory.id ? updated : c));
+                if (onLog) onLog('Updated Category', 'Master Data', `Updated category: ${formData.code}`, editingCategory.id);
+            } else {
+                const created = await createCategory(formData);
+                setCategories([...categories, created]);
+                if (onLog) onLog('Created Category', 'Master Data', `Created category: ${formData.code}`, created.id);
+            }
+            setIsModalOpen(false);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save category.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsModalOpen(false);
     };
 
     const filteredCategories = categories.filter((c: AssetCategory) => {
@@ -2903,8 +3122,10 @@ const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
                             </div>
 
                             <div className="pt-2 flex justify-end gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
-                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Category</button>
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
+                                <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                                    {isSaving ? 'Saving...' : 'Save Category'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -2928,6 +3149,7 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
     const [filterCategory, setFilterCategory] = useState('All');
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleEdit = (item: CatalogItem) => {
         setEditingItem(item);
@@ -2955,37 +3177,47 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to deactivate this item?')) {
-            const updated = catalog.map((c: CatalogItem) => c.id === id ? { ...c, status: 'Inactive' } : c);
-            setCatalog(updated);
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to deactivate this item?')) return;
+        try {
+            const updated = await deactivateCatalogItem(id);
+            setCatalog(catalog.map((c: CatalogItem) => c.id === id ? updated : c));
             if (onLog) onLog('Deactivated PPE Item', 'Master Data', `Deactivated item ID: ${id}`, id);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to deactivate item.');
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.article || !formData.description || !formData.unit || !formData.categoryId) {
             setError('All fields are required.');
             return;
         }
 
-        if (editingItem) {
-            const updated = catalog.map((c: CatalogItem) => c.id === editingItem.id ? { ...c, ...formData } : c);
-            setCatalog(updated);
-            if (onLog) onLog('Updated PPE Item', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
-        } else {
-            const newItem: CatalogItem = {
-                id: generateId(),
-                stockNumber: `PPE-${generateId()}`,
-                ...formData,
-                itemType: 'PPE',
-                quantity: 0, 
-                status: formData.status
-            };
-            setCatalog([...catalog, newItem]);
-            if (onLog) onLog('Created PPE Item', 'Master Data', `Created item: ${formData.article}`, newItem.id);
+        setIsSaving(true);
+        setError('');
+        const payload = {
+            ...formData,
+            itemType: 'PPE',
+            stockNumber: editingItem?.stockNumber || `PPE-${generateId()}`,
+            quantity: editingItem?.quantity ?? 0,
+        };
+        try {
+            if (editingItem) {
+                const updated = await updateCatalogItem(editingItem.id, payload);
+                setCatalog(catalog.map((c: CatalogItem) => c.id === editingItem.id ? updated : c));
+                if (onLog) onLog('Updated PPE Item', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
+            } else {
+                const created = await createCatalogItem(payload);
+                setCatalog([...catalog, created]);
+                if (onLog) onLog('Created PPE Item', 'Master Data', `Created item: ${formData.article}`, created.id);
+            }
+            setIsModalOpen(false);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save item.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsModalOpen(false);
     };
 
     const filteredItems = catalog.filter((c: CatalogItem) => {
@@ -3139,8 +3371,10 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
                             </div>
 
                             <div className="pt-2 flex justify-end gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
-                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save PPE Item</button>
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
+                                <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                                    {isSaving ? 'Saving...' : 'Save PPE Item'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -3164,6 +3398,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
     const [filterCategory, setFilterCategory] = useState('All');
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleEdit = (item: CatalogItem) => {
         setEditingItem(item);
@@ -3191,37 +3426,47 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to deactivate this item?')) {
-            const updated = catalog.map((c: CatalogItem) => c.id === id ? { ...c, status: 'Inactive' } : c);
-            setCatalog(updated);
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to deactivate this item?')) return;
+        try {
+            const updated = await deactivateCatalogItem(id);
+            setCatalog(catalog.map((c: CatalogItem) => c.id === id ? updated : c));
             if (onLog) onLog('Deactivated Consumable', 'Master Data', `Deactivated item ID: ${id}`, id);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to deactivate item.');
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.article || !formData.description || !formData.unit || !formData.categoryId) {
             setError('All fields are required.');
             return;
         }
 
-        if (editingItem) {
-            const updated = catalog.map((c: CatalogItem) => c.id === editingItem.id ? { ...c, ...formData } : c);
-            setCatalog(updated);
-            if (onLog) onLog('Updated Consumable', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
-        } else {
-            const newItem: CatalogItem = {
-                id: generateId(),
-                stockNumber: `SUP-${generateId()}`,
-                ...formData,
-                itemType: 'Consumable',
-                quantity: 0, 
-                status: formData.status
-            };
-            setCatalog([...catalog, newItem]);
-            if (onLog) onLog('Created Consumable', 'Master Data', `Created item: ${formData.article}`, newItem.id);
+        setIsSaving(true);
+        setError('');
+        const payload = {
+            ...formData,
+            itemType: 'Consumable',
+            stockNumber: editingItem?.stockNumber || `SUP-${generateId()}`,
+            quantity: editingItem?.quantity ?? 0,
+        };
+        try {
+            if (editingItem) {
+                const updated = await updateCatalogItem(editingItem.id, payload);
+                setCatalog(catalog.map((c: CatalogItem) => c.id === editingItem.id ? updated : c));
+                if (onLog) onLog('Updated Consumable', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
+            } else {
+                const created = await createCatalogItem(payload);
+                setCatalog([...catalog, created]);
+                if (onLog) onLog('Created Consumable', 'Master Data', `Created item: ${formData.article}`, created.id);
+            }
+            setIsModalOpen(false);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to save item.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsModalOpen(false);
     };
 
     const filteredItems = catalog.filter((c: CatalogItem) => {
@@ -3381,8 +3626,10 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
                             </div>
 
                             <div className="pt-2 flex justify-end gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Cancel</button>
-                                <button onClick={handleSave} className="px-6 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm">Save Consumable</button>
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
+                                <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
+                                    {isSaving ? 'Saving...' : 'Save Consumable'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -3399,24 +3646,70 @@ const App = () => {
 
   // Data State Initialization
   const [inventory, setInventory] = useState(INITIAL_INVENTORY);
-  const [departments, setDepartments] = useState(INITIAL_DEPARTMENTS);
-  const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
-  const [locations, setLocations] = useState(INITIAL_LOCATIONS);
-  const [funds, setFunds] = useState(INITIAL_FUNDS);
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
-  const [catalog, setCatalog] = useState(INITIAL_CATALOG);
-  const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS);
-  const [assets, setAssets] = useState(INITIAL_ASSETS);
-  const [mrs, setMrs] = useState(INITIAL_MRS);
-  const [audits, setAudits] = useState(INITIAL_AUDITS);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [funds, setFunds] = useState<FundCluster[]>([]);
+  const [categories, setCategories] = useState<AssetCategory[]>([]);
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [mrs, setMrs] = useState<MemorandumReceipt[]>([]);
+  const [audits, setAudits] = useState<AuditSession[]>([]);
   const [logs, setLogs] = useState(INITIAL_LOGS);
   const [settings, setSettings] = useState(INITIAL_SETTINGS);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [selectedMR, setSelectedMR] = useState<MemorandumReceipt | null>(null);
+  const [isSavingMR, setIsSavingMR] = useState(false);
+  const [isSavingAudit, setIsSavingAudit] = useState(false);
+  
+  useEffect(() => {
+    const load = async () => {
+      setIsBootstrapping(true);
+      try {
+        const data = await bootstrapDataFromApi();
+        setDepartments(data.departments);
+        setEmployees(data.employees);
+        setLocations(data.locations);
+        setFunds(data.funds);
+        setCategories(data.categories);
+        setCatalog(data.catalog);
+        setAssets(data.assets);
+        setTransactions(data.transactions);
+        setMrs(data.mrs);
+        setAudits(data.audits);
+        setDataError(null);
+      } catch (err) {
+        console.error('API bootstrap failed, falling back to mock data.', err);
+        setDataError('Failed to load data from the backend. Using local mock data instead.');
+        setDepartments(INITIAL_DEPARTMENTS);
+        setEmployees(INITIAL_EMPLOYEES);
+        setLocations(INITIAL_LOCATIONS);
+        setFunds(INITIAL_FUNDS);
+        setCategories(INITIAL_CATEGORIES);
+        setCatalog(INITIAL_CATALOG);
+        setAssets(INITIAL_ASSETS);
+        setTransactions(INITIAL_TRANSACTIONS);
+        setMrs(INITIAL_MRS);
+        setAudits(INITIAL_AUDITS);
+      } finally {
+        setIsBootstrapping(false);
+      }
+    };
+    load();
+  }, []);
   
   // Asset Editing State
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
-  
+
   // Active Audit Session
   const [activeAudit, setActiveAudit] = useState<AuditSession | null>(null);
+  const [isSavingAsset, setIsSavingAsset] = useState(false);
+  const [isSavingTransaction, setIsSavingTransaction] = useState(false);
   
   // Helper for logging
   const handleLog = (action: string, module: string, description: string, referenceId?: string) => {
@@ -3434,8 +3727,83 @@ const App = () => {
       setLogs([newLog, ...logs]);
   };
 
+  const handleAssetSave = async (data: any) => {
+      setIsSavingAsset(true);
+      try {
+          const payload = { ...data, quantity: data.quantity ?? (editingAsset?.quantity ?? 1) };
+          if (editingAsset) {
+              const updated = await updateAsset(editingAsset.id, payload);
+              setAssets(assets.map((a: Asset) => a.id === editingAsset.id ? updated : a));
+              handleLog('Updated Asset', 'Asset Registry', `Updated asset ${updated.propertyNumber}`, editingAsset.id);
+          } else {
+              const created = await createAsset(payload);
+              setAssets([...assets, created]);
+              handleLog('Registered Asset', 'Asset Registry', `Registered new asset ${created.propertyNumber}`, created.id);
+          }
+          setEditingAsset(null);
+          setView('asset-registry');
+      } catch (err: any) {
+          console.error('Failed to save asset', err);
+          setDataError(typeof err?.message === 'string' ? err.message : 'Failed to save asset.');
+          throw err;
+      } finally {
+          setIsSavingAsset(false);
+      }
+  };
+
+  const handleTransactionSave = async (data: any) => {
+      setIsSavingTransaction(true);
+      try {
+          const created = await createTransaction({ ...data, status: 'Completed', createdBy: 'Jeffrey Meneses' });
+          setTransactions([created, ...transactions]);
+          // Refresh catalog quantities from backend or adjust locally based on created.items
+          if (created.items?.length) {
+              setCatalog(catalog.map((c: CatalogItem) => {
+                  const delta = created.items
+                    .filter((i: any) => i.catalogItemId === c.id)
+                    .reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
+                  if (!delta || c.itemType !== 'Consumable') return c;
+                  if (created.type === 'Stock In') {
+                      return { ...c, quantity: (c.quantity || 0) + delta };
+                  } else {
+                      return { ...c, quantity: Math.max(0, (c.quantity || 0) - delta) };
+                  }
+              }));
+          }
+          handleLog('Recorded Transaction', 'Stock Transactions', `Recorded new stock ${data.type.toLowerCase()}`, created.id);
+          setView('transactions-list');
+      } finally {
+          setIsSavingTransaction(false);
+      }
+  };
+
+  const handleMRSave = async (data: any) => {
+      setIsSavingMR(true);
+      try {
+          const created = await createMemorandumReceipt(data);
+          setMrs([created, ...mrs]);
+          handleLog('Issued MR', 'Memorandum Receipt', `Issued ${created.mrNumber}`, created.id);
+          setView('mr-list');
+      } catch (err: any) {
+          setDataError(err?.message || 'Failed to issue MR.');
+          throw err;
+      } finally {
+          setIsSavingMR(false);
+      }
+  };
+
   if (!isAuthenticated) {
       return <LandingPage onLogin={() => setIsAuthenticated(true)} />;
+  }
+
+  if (isAuthenticated && isBootstrapping) {
+      return (
+        <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-600">
+            <div className="flex items-center gap-3 text-sm font-medium">
+                <Loader2 className="animate-spin" /> Loading data from server...
+            </div>
+        </div>
+      );
   }
 
   const renderContent = () => {
@@ -3526,8 +3894,14 @@ const App = () => {
                       if (view === 'asset-edit' && asset) {
                           setEditingAsset(asset);
                           setView('asset-new');
+                          setSelectedAsset(null);
+                      } else if (view === 'asset-detail' && asset) {
+                          setSelectedAsset(asset);
+                          setView('asset-detail');
+                          setEditingAsset(null);
                       } else {
                           setEditingAsset(null);
+                          setSelectedAsset(null);
                           setView(view);
                       }
                   }}
@@ -3535,18 +3909,7 @@ const App = () => {
               />;
           case 'asset-new': 
               return <AssetForm 
-                  onSave={(data: any) => { 
-                      if (editingAsset) {
-                          const updated = assets.map((a: Asset) => a.id === editingAsset.id ? { ...a, ...data, updatedAt: new Date().toISOString() } : a);
-                          setAssets(updated);
-                          handleLog('Updated Asset', 'Asset Registry', `Updated asset ${data.propertyNumber}`, editingAsset.id);
-                      } else {
-                          const newAsset = { ...data, id: generateId(), createdAt: new Date().toISOString() };
-                          setAssets([...assets, newAsset]);
-                          handleLog('Registered Asset', 'Asset Registry', `Registered new asset ${data.propertyNumber}`, newAsset.id);
-                      }
-                      setView('asset-registry'); 
-                  }} 
+                  onSave={handleAssetSave} 
                   onCancel={() => setView('asset-registry')} 
                   assets={assets}
                   catalog={catalog} 
@@ -3555,16 +3918,33 @@ const App = () => {
                   locations={locations} 
                   funds={funds}
                   initialData={editingAsset}
+                  isSaving={isSavingAsset}
               />;
-          case 'asset-detail': return <AssetDetail onBack={() => setView('asset-registry')} />;
+          case 'asset-detail': return <AssetDetail asset={selectedAsset} catalog={catalog} departments={departments} locations={locations} employees={employees} funds={funds} onBack={() => { setSelectedAsset(null); setView('asset-registry'); }} />;
 
-          case 'transactions-list': return <StockTransactionList transactions={transactions} onNavigate={setView} />;
-          case 'transactions-new': return <StockTransactionForm onSave={() => { setView('transactions-list'); handleLog('Recorded Transaction', 'Stock Transactions', 'Recorded new stock transaction'); }} onCancel={() => setView('transactions-list')} catalog={catalog} departments={departments} />;
-          case 'transactions-detail': return <StockTransactionDetail onBack={() => setView('transactions-list')} />;
+          case 'transactions-list': return <StockTransactionList transactions={transactions} onNavigate={(view: ViewState, txn?: Transaction) => {
+              if (view === 'transactions-detail' && txn) {
+                  setSelectedTransaction(txn);
+                  setView('transactions-detail');
+              } else {
+                  setSelectedTransaction(null);
+                  setView(view);
+              }
+          }} />;
+          case 'transactions-new': return <StockTransactionForm onSave={(data: any) => handleTransactionSave(data)} onCancel={() => setView('transactions-list')} catalog={catalog} departments={departments} isSaving={isSavingTransaction} />;
+          case 'transactions-detail': return <StockTransactionDetail transaction={selectedTransaction} catalog={catalog} departments={departments} onBack={() => { setSelectedTransaction(null); setView('transactions-list'); }} />;
 
-          case 'mr-list': return <MRListView mrs={mrs} onNavigate={setView} />;
-          case 'mr-new': return <MRForm onSave={() => { setView('mr-list'); handleLog('Issued MR', 'Memorandum Receipt', 'Issued new Memorandum Receipt'); }} onCancel={() => setView('mr-list')} employees={employees} />;
-          case 'mr-detail': return <MRDetail onBack={() => setView('mr-list')} />;
+          case 'mr-list': return <MRListView mrs={mrs} onNavigate={(view: ViewState, mr?: MemorandumReceipt) => {
+              if (view === 'mr-detail' && mr) {
+                  setSelectedMR(mr);
+                  setView('mr-detail');
+              } else {
+                  setSelectedMR(null);
+                  setView(view);
+              }
+          }} />;
+          case 'mr-new': return <MRForm onSave={handleMRSave} onCancel={() => setView('mr-list')} employees={employees} assets={assets} isSaving={isSavingMR} />;
+          case 'mr-detail': return <MRDetail mr={selectedMR} employees={employees} departments={departments} onBack={() => { setSelectedMR(null); setView('mr-list'); }} />;
 
           case 'audit-list': 
               return <AuditList 
@@ -3577,15 +3957,24 @@ const App = () => {
           case 'audit-new': 
               return <AuditNew 
                   onCancel={() => setView('audit-list')} 
-                  onSave={(session: AuditSession) => {
-                      setAudits([session, ...audits]);
-                      setActiveAudit(session);
-                      handleLog('Created Audit', 'Physical Count', `Created session ${session.sessionId}`, session.id);
-                      setView('audit-detail');
+                  onSave={async (session: AuditSession) => {
+                      setIsSavingAudit(true);
+                      try {
+                          const created = await createAuditSession(session);
+                          setAudits([created, ...audits]);
+                          setActiveAudit(created);
+                          handleLog('Created Audit', 'Physical Count', `Created session ${created.sessionId}`, created.id);
+                          setView('audit-detail');
+                      } catch (err: any) {
+                          setDataError(err?.message || 'Failed to create audit session.');
+                      } finally {
+                          setIsSavingAudit(false);
+                      }
                   }}
                   locations={locations}
                   departments={departments}
                   assets={assets}
+                  isSaving={isSavingAudit}
               />;
           case 'audit-detail': 
               if (!activeAudit) return <AuditList audits={audits} onNavigate={setView} />;
@@ -3594,18 +3983,33 @@ const App = () => {
                   return <AuditWorksheet 
                       audit={activeAudit} 
                       onBack={() => setView('audit-list')} 
-                      onSaveDraft={(updated: AuditSession) => {
-                          const newAudits = audits.map(a => a.id === updated.id ? updated : a);
-                          setAudits(newAudits);
-                          setActiveAudit(updated);
-                          handleLog('Updated Audit', 'Physical Count', `Saved draft for ${updated.sessionId}`, updated.id);
+                      onSaveDraft={async (updated: AuditSession) => {
+                          setIsSavingAudit(true);
+                          try {
+                              const saved = await updateAuditSession(updated.id, { ...updated, status: 'Draft' });
+                              const newAudits = audits.map(a => a.id === saved.id ? saved : a);
+                              setAudits(newAudits);
+                              setActiveAudit(saved);
+                              handleLog('Updated Audit', 'Physical Count', `Saved draft for ${saved.sessionId}`, saved.id);
+                          } catch (err: any) {
+                              setDataError(err?.message || 'Failed to save audit draft.');
+                          } finally {
+                              setIsSavingAudit(false);
+                          }
                       }}
-                      onFinalize={(final: AuditSession) => {
-                          const finalized = { ...final, status: 'Finalized', finalizedAt: new Date().toISOString() };
-                          const newAudits = audits.map(a => a.id === final.id ? finalized : a);
-                          setAudits(newAudits as AuditSession[]); // Cast due to status change
-                          setActiveAudit(finalized as AuditSession);
-                          handleLog('Finalized Audit', 'Physical Count', `Finalized session ${finalized.sessionId}`, finalized.id);
+                      onFinalize={async (final: AuditSession) => {
+                          setIsSavingAudit(true);
+                          try {
+                              const finalized = await updateAuditSession(final.id, { ...final, status: 'Finalized', finalizedAt: new Date().toISOString() });
+                              const newAudits = audits.map(a => a.id === finalized.id ? finalized : a);
+                              setAudits(newAudits as AuditSession[]);
+                              setActiveAudit(finalized as AuditSession);
+                              handleLog('Finalized Audit', 'Physical Count', `Finalized session ${finalized.sessionId}`, finalized.id);
+                          } catch (err: any) {
+                              setDataError(err?.message || 'Failed to finalize audit.');
+                          } finally {
+                              setIsSavingAudit(false);
+                          }
                       }}
                   />;
               } else {
@@ -3699,6 +4103,11 @@ const App = () => {
 
             <div className="flex-1 overflow-auto p-6 md:p-8 print:p-0 print:overflow-visible custom-scrollbar">
                 <div className="max-w-7xl mx-auto print:max-w-none print:mx-0">
+                    {dataError && (
+                        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm font-medium">
+                            {dataError}
+                        </div>
+                    )}
                     {renderContent()}
                 </div>
                 <div className="mt-12 pt-6 border-t border-slate-200 text-center text-slate-400 text-xs print:hidden">

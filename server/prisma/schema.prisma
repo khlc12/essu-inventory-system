@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Status {
+  Active
+  Inactive
+}
+
+enum ItemType {
+  PPE
+  Consumable
+}
+
+enum CategoryType {
+  PPE
+  Consumable
+  SemiExpendable
+}
+
+enum AssetStatus {
+  Active
+  Retired
+  UnderRepair
+  Missing
+}
+
+enum TransactionType {
+  StockIn
+  StockOut
+}
+
+enum TransactionStatus {
+  Pending
+  Completed
+  Cancelled
+}
+
+enum AuditSessionStatus {
+  Draft
+  Finalized
+}
+
+enum AuditItemStatus {
+  Matched
+  Shortage
+  Overage
+  Uncounted
+}
+
+enum MRStatus {
+  Active
+  Closed
+}
+
+model User {
+  id           String        @id @default(cuid())
+  username     String        @unique
+  passwordHash String
+  role         String
+  status       Status        @default(Active)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  logs         ActivityLog[]
+}
+
+model Department {
+  id          String         @id @default(cuid())
+  code        String         @unique
+  name        String
+  head        String?
+  locationId  String?
+  location    Location?      @relation(fields: [locationId], references: [id])
+  status      Status         @default(Active)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  employees   Employee[]
+  assets      Asset[]
+  transactions Transaction[]
+  mrs         MemorandumReceipt[]
+  audits      AuditSession[]
+}
+
+model Location {
+  id          String         @id @default(cuid())
+  code        String         @unique
+  name        String
+  description String?
+  status      Status         @default(Active)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  departments Department[]
+  assets      Asset[]
+  transactions Transaction[]
+  audits      AuditSession[]
+}
+
+model FundCluster {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  name        String
+  description String?
+  status      Status    @default(Active)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  catalog     CatalogItem[]
+  assets      Asset[]
+}
+
+model AssetCategory {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  description String?
+  type        CategoryType
+  status      Status     @default(Active)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  catalog     CatalogItem[]
+}
+
+model CatalogItem {
+  id                  String          @id @default(cuid())
+  stockNumber         String          @unique
+  article             String
+  description         String
+  categoryId          String
+  category            AssetCategory   @relation(fields: [categoryId], references: [id])
+  fundClusterId       String?
+  fundCluster         FundCluster?    @relation(fields: [fundClusterId], references: [id])
+  unit                String
+  unitValue           Decimal?
+  itemType            ItemType
+  quantity            Int             @default(0)
+  estimatedUsefulLife Int?
+  reorderPoint        Int?
+  status              Status          @default(Active)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  assets              Asset[]
+  transactionItems    TransactionItem[]
+}
+
+model Employee {
+  id          String    @id @default(cuid())
+  employeeId  String    @unique
+  firstName   String
+  middleName  String?
+  lastName    String
+  position    String?
+  departmentId String
+  department  Department @relation(fields: [departmentId], references: [id])
+  status      Status    @default(Active)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  assets      Asset[]   @relation("AssetCustodian")
+  transactionItems TransactionItem[]
+  mrs         MemorandumReceipt[]
+}
+
+model Asset {
+  id             String        @id @default(cuid())
+  propertyNumber String        @unique
+  catalogItemId  String
+  catalogItem    CatalogItem   @relation(fields: [catalogItemId], references: [id])
+  description    String
+  unitValue      Decimal       @db.Decimal(14, 2)
+  quantity       Int
+  dateAcquired   DateTime
+  fundClusterId  String
+  fundCluster    FundCluster   @relation(fields: [fundClusterId], references: [id])
+  departmentId   String
+  department     Department    @relation(fields: [departmentId], references: [id])
+  custodianId    String
+  custodian      Employee      @relation("AssetCustodian", fields: [custodianId], references: [id])
+  locationId     String
+  location       Location      @relation(fields: [locationId], references: [id])
+  remarks        String?
+  status         AssetStatus
+  imageUrl       String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  mrItems        MRItem[]
+  auditItems     AuditItem[]
+}
+
+model Transaction {
+  id            String             @id @default(cuid())
+  transactionId String             @unique
+  date          DateTime
+  type          TransactionType
+  departmentId  String
+  department    Department         @relation(fields: [departmentId], references: [id])
+  locationId    String?
+  location      Location?          @relation(fields: [locationId], references: [id])
+  status        TransactionStatus
+  remarks       String?
+  createdBy     String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  items         TransactionItem[]
+}
+
+model TransactionItem {
+  id             String       @id @default(cuid())
+  transactionId  String
+  transaction    Transaction  @relation(fields: [transactionId], references: [id])
+  catalogItemId  String
+  catalogItem    CatalogItem  @relation(fields: [catalogItemId], references: [id])
+  quantity       Int
+  remarks        String?
+  custodianId    String?
+  custodian      Employee?    @relation(fields: [custodianId], references: [id])
+}
+
+model MemorandumReceipt {
+  id           String     @id @default(cuid())
+  mrNumber     String     @unique
+  dateIssued   DateTime
+  employeeId   String
+  employee     Employee   @relation(fields: [employeeId], references: [id])
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  status       MRStatus
+  remarks      String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  items        MRItem[]
+}
+
+model MRItem {
+  id         String    @id @default(cuid())
+  mrId       String
+  mr         MemorandumReceipt @relation(fields: [mrId], references: [id])
+  assetId    String
+  asset      Asset     @relation(fields: [assetId], references: [id])
+  propertyNumber String
+  description String
+  unitValue   Decimal  @db.Decimal(14, 2)
+  returnDate  DateTime?
+  remarks     String?
+}
+
+model AuditSession {
+  id          String          @id @default(cuid())
+  sessionId   String          @unique
+  date        DateTime
+  departmentId String?
+  department  Department?     @relation(fields: [departmentId], references: [id])
+  locationId  String?
+  location    Location?       @relation(fields: [locationId], references: [id])
+  description String
+  status      AuditSessionStatus
+  createdBy   String
+  createdAt   DateTime        @default(now())
+  finalizedAt DateTime?
+  items       AuditItem[]
+}
+
+model AuditItem {
+  id                 String        @id @default(cuid())
+  auditId            String
+  audit              AuditSession  @relation(fields: [auditId], references: [id])
+  assetId            String
+  asset              Asset         @relation(fields: [assetId], references: [id])
+  propertyNumber     String
+  description        String
+  unitValue          Decimal       @db.Decimal(14, 2)
+  systemQty          Int
+  actualQty          Int?
+  shortageOverageQty Int
+  shortageOverageValue Decimal     @db.Decimal(14, 2) @default(0)
+  status             AuditItemStatus
+  remarks            String?
+  locationName       String
+  custodianName      String
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  userId      String
+  username    String
+  role        String
+  action      String
+  module      String
+  referenceId String
+  description String
+  user        User?    @relation(fields: [userId], references: [id])
+}
+
+model SystemSettings {
+  id            Int    @id @default(1)
+  general       Json
+  inventory     Json
+  documents     Json
+  users         Json
+  notifications Json
+  updatedAt     DateTime @updatedAt
+}
