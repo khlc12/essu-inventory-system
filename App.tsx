@@ -1264,14 +1264,86 @@ const AssetDetail = ({ asset, catalog, departments, locations, employees, funds,
 };
 
 // --- Transaction Modules ---
-const StockTransactionList = ({ transactions, onNavigate }: any) => (
+const StockTransactionList = ({ transactions, onNavigate, departments, catalog }: any) => {
+    const [search, setSearch] = useState('');
+    const [filterType, setFilterType] = useState('All');
+    const [filterDept, setFilterDept] = useState('All');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [page, setPage] = useState(1);
+    const pageSize = 25;
+
+    const filtered = useMemo(() => {
+        const term = search.toLowerCase();
+        return transactions.filter((t: Transaction) => {
+            const matchesType = filterType === 'All' || t.type === filterType;
+            const matchesDept = filterDept === 'All' || t.departmentId === filterDept;
+            const matchesSearch =
+              term === '' ||
+              t.transactionId.toLowerCase().includes(term) ||
+              (t.remarks || '').toLowerCase().includes(term);
+            const ts = new Date(t.date).getTime();
+            const matchStart = startDate ? ts >= new Date(startDate).getTime() : true;
+            const matchEnd = endDate ? ts <= new Date(endDate).getTime() : true;
+            return matchesType && matchesDept && matchesSearch && matchStart && matchEnd;
+        });
+    }, [transactions, filterType, filterDept, search, startDate, endDate]);
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const resetPagination = () => setPage(1);
+
+    const statusBadge = (status: string) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            status === 'Completed' ? 'bg-green-50 text-green-700' :
+            status === 'Pending' ? 'bg-amber-50 text-amber-700' :
+            'bg-slate-100 text-slate-600'
+        }`}>{status}</span>
+    );
+
+    return (
     <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-wrap gap-3">
             <h1 className="text-2xl font-bold text-slate-800">Stock Transactions</h1>
             <button onClick={() => onNavigate('transactions-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
                 <Plus size={16} /> New Transaction
             </button>
         </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-end">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); resetPagination(); }}
+                    placeholder="Search by Transaction ID or remarks..."
+                    className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[220px]"
+                />
+            </div>
+            <select value={filterType} onChange={(e) => { setFilterType(e.target.value); resetPagination(); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[140px]">
+                <option value="All">All Types</option>
+                <option value="Stock In">Stock In</option>
+                <option value="Stock Out">Stock Out</option>
+            </select>
+            <select value={filterDept} onChange={(e) => { setFilterDept(e.target.value); resetPagination(); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[200px]">
+                <option value="All">All Departments</option>
+                {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <div className="flex gap-2 items-center text-sm text-slate-600 flex-wrap">
+                <div className="flex gap-2 items-center">
+                    <span className="text-slate-500">From</span>
+                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); resetPagination(); }} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                </div>
+                <div className="flex gap-2 items-center">
+                    <span className="text-slate-500">To</span>
+                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); resetPagination(); }} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                </div>
+            </div>
+        </div>
+
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
              <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
@@ -1279,23 +1351,95 @@ const StockTransactionList = ({ transactions, onNavigate }: any) => (
                         <th className="px-6 py-4">Transaction ID</th>
                         <th className="px-6 py-4">Type</th>
                         <th className="px-6 py-4">Date</th>
+                        <th className="px-6 py-4">Department</th>
+                        <th className="px-6 py-4">Items</th>
                         <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                    {transactions.map((t: Transaction) => (
-                        <tr key={t.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('transactions-detail', t)}>
-                            <td className="px-6 py-3 font-medium text-[#006400]">{t.transactionId}</td>
-                            <td className="px-6 py-3"><span className={`flex items-center gap-2 ${t.type === 'Stock In' ? 'text-green-600' : 'text-amber-600'}`}>{t.type === 'Stock In' ? <ArrowDownLeft size={16}/> : <ArrowUpRight size={16}/>} {t.type}</span></td>
-                            <td className="px-6 py-3 text-slate-500">{formatDate(t.date)}</td>
-                             <td className="px-6 py-3"><span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs">{t.status}</span></td>
+                    {pageItems.map((t: Transaction) => {
+                        const dept = departments.find((d: Department) => d.id === t.departmentId);
+                        const itemCount = t.items?.length || 0;
+                        const totalQty = t.items?.reduce((sum: number, i: TransactionItem) => sum + (i.quantity || 0), 0) || 0;
+                        return (
+                            <React.Fragment key={t.id}>
+                            <tr className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{t.transactionId}</td>
+                                <td className="px-6 py-3">
+                                    <span className={`flex items-center gap-2 px-2 py-1 rounded-full text-xs font-semibold ${t.type === 'Stock In' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                                        {t.type === 'Stock In' ? <ArrowDownLeft size={14}/> : <ArrowUpRight size={14}/>} {t.type}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3 text-slate-500">{formatDate(t.date)}</td>
+                                <td className="px-6 py-3 text-slate-600">{dept ? dept.name : t.departmentId}</td>
+                                <td className="px-6 py-3 text-slate-600">{itemCount} items / {totalQty} qty</td>
+                                <td className="px-6 py-3">{statusBadge(t.status)}</td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => setExpandedId(expandedId === t.id ? null : t.id)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Items"><ChevronRight size={16} className={`transition-transform ${expandedId === t.id ? 'rotate-90' : ''}`} /></button>
+                                        <button onClick={() => onNavigate('transactions-detail', t)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Details"><Eye size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {expandedId === t.id && (
+                                <tr className="bg-slate-50/60">
+                                    <td colSpan={7} className="px-6 py-3">
+                                        <div className="text-xs text-slate-500 mb-2">Line Items</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            {t.items?.map((item: TransactionItem) => {
+                                                const catItem = catalog.find((c: CatalogItem) => c.id === item.catalogItemId);
+                                                return (
+                                                    <div key={item.id} className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between">
+                                                        <div>
+                                                            <div className="font-semibold text-slate-800">{catItem ? catItem.article : item.catalogItemId}</div>
+                                                            <div className="text-xs text-slate-500">{catItem ? catItem.description : ''}</div>
+                                                            {item.remarks && <div className="text-xs text-slate-500 mt-1">Remarks: {item.remarks}</div>}
+                                                        </div>
+                                                        <div className="text-right font-bold text-slate-800">{item.quantity}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {(!t.items || t.items.length === 0) && <div className="text-slate-400 text-sm">No items</div>}
+                                        </div>
+                                        {t.remarks && <div className="mt-2 text-sm text-slate-600">Remarks: {t.remarks}</div>}
+                                    </td>
+                                </tr>
+                            )}
+                            </React.Fragment>
+                        );
+                    })}
+                    {pageItems.length === 0 && (
+                        <tr>
+                            <td colSpan={7} className="px-6 py-8 text-center text-slate-400">No transactions found.</td>
                         </tr>
-                    ))}
+                    )}
                 </tbody>
             </table>
         </div>
+
+        <div className="flex items-center justify-between text-sm text-slate-600">
+            <div>Page {currentPage} of {totalPages}</div>
+            <div className="flex gap-2">
+                <button
+                    onClick={() => setPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded border ${currentPage === 1 ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:border-[#006400] hover:text-[#006400]'}`}
+                >
+                    Prev
+                </button>
+                <button
+                    onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1 rounded border ${currentPage === totalPages ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:border-[#006400] hover:text-[#006400]'}`}
+                >
+                    Next
+                </button>
+            </div>
+        </div>
     </div>
-);
+    );
+};
 
 const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving }: any) => {
     const [type, setType] = useState<TransactionType>('Stock In');
@@ -1515,36 +1659,142 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
 };
 
 // --- MR Modules ---
-const MRListView = ({ mrs, onNavigate }: any) => (
-    <div className="space-y-6">
-        <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-slate-800">Memorandum Receipts</h1>
-            <button onClick={() => onNavigate('mr-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
-                <Plus size={16} /> Issue MR
-            </button>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-             <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                    <tr>
-                        <th className="px-6 py-4">MR Number</th>
-                        <th className="px-6 py-4">Date Issued</th>
-                        <th className="px-6 py-4">Status</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {mrs.map((m: MemorandumReceipt) => (
-                        <tr key={m.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('mr-detail', m)}>
-                            <td className="px-6 py-3 font-medium text-[#006400]">{m.mrNumber}</td>
-                            <td className="px-6 py-3 text-slate-500">{formatDate(m.dateIssued)}</td>
-                             <td className="px-6 py-3"><span className="px-2 py-1 bg-green-100 text-[#006400] rounded-full text-xs font-medium">{m.status}</span></td>
+const MRListView = ({ mrs, onNavigate, employees }: any) => {
+    const [search, setSearch] = useState('');
+    const [status, setStatus] = useState('All');
+    const [custodian, setCustodian] = useState('All');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    const filtered = useMemo(() => {
+        const term = search.toLowerCase();
+        return mrs.filter((m: MemorandumReceipt) => {
+            const matchesStatus = status === 'All' || m.status === status;
+            const matchesCustodian = custodian === 'All' || m.employeeId === custodian;
+            const matchesSearch = term === '' || m.mrNumber.toLowerCase().includes(term) || (m.remarks || '').toLowerCase().includes(term);
+            const ts = new Date(m.dateIssued).getTime();
+            const matchStart = startDate ? ts >= new Date(startDate).getTime() : true;
+            const matchEnd = endDate ? ts <= new Date(endDate).getTime() : true;
+            return matchesStatus && matchesCustodian && matchesSearch && matchStart && matchEnd;
+        });
+    }, [mrs, status, custodian, search, startDate, endDate]);
+
+    const statusBadge = (s: string) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${s === 'Active' ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{s}</span>
+    );
+
+    const custodianName = (id: string) => {
+        const emp = employees.find((e: Employee) => e.id === id);
+        return getEmployeeFullName(emp);
+    };
+
+    const totalValue = (items: MRItem[]) =>
+        items.reduce((sum, i) => sum + (i.unitValue || 0), 0);
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center flex-wrap gap-3">
+                <h1 className="text-2xl font-bold text-slate-800">Memorandum Receipts</h1>
+                <button onClick={() => onNavigate('mr-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
+                    <Plus size={16} /> Issue MR
+                </button>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-end">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search MR number or remarks..."
+                        className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[200px]"
+                    />
+                </div>
+                <select value={status} onChange={(e) => setStatus(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]">
+                    <option value="All">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="Closed">Closed</option>
+                </select>
+                <select value={custodian} onChange={(e) => setCustodian(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[180px]">
+                    <option value="All">All Custodians</option>
+                    {employees.map((e: Employee) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
+                </select>
+                <div className="flex gap-2 items-center text-sm text-slate-600 flex-wrap">
+                    <div className="flex gap-2 items-center">
+                        <span className="text-slate-500">From</span>
+                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                        <span className="text-slate-500">To</span>
+                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                 <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">MR Number</th>
+                            <th className="px-6 py-4">Date Issued</th>
+                            <th className="px-6 py-4">Custodian</th>
+                            <th className="px-6 py-4">Items</th>
+                            <th className="px-6 py-4 text-right">Total Value</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filtered.map((m: MemorandumReceipt) => (
+                            <React.Fragment key={m.id}>
+                            <tr className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{m.mrNumber}</td>
+                                <td className="px-6 py-3 text-slate-500">{formatDate(m.dateIssued)}</td>
+                                <td className="px-6 py-3 text-slate-700">{custodianName(m.employeeId)}</td>
+                                <td className="px-6 py-3 text-slate-600">{m.items?.length || 0} items</td>
+                                <td className="px-6 py-3 text-right font-semibold text-slate-800">{formatCurrency(totalValue(m.items || []))}</td>
+                                <td className="px-6 py-3">{statusBadge(m.status)}</td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Items"><ChevronRight size={16} className={`transition-transform ${expandedId === m.id ? 'rotate-90' : ''}`} /></button>
+                                        <button onClick={() => onNavigate('mr-detail', m)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Details"><Eye size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {expandedId === m.id && (
+                                <tr className="bg-slate-50/60">
+                                    <td colSpan={7} className="px-6 py-3">
+                                        <div className="text-xs text-slate-500 mb-2">Items</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            {m.items?.map((item: MRItem) => (
+                                                <div key={item.assetId} className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between">
+                                                    <div>
+                                                        <div className="font-semibold text-slate-800">{item.propertyNumber}</div>
+                                                        <div className="text-xs text-slate-500">{item.description}</div>
+                                                    </div>
+                                                    <div className="text-right text-sm font-bold text-slate-800">{formatCurrency(item.unitValue)}</div>
+                                                </div>
+                                            ))}
+                                            {(!m.items || m.items.length === 0) && <div className="text-slate-400 text-sm">No items</div>}
+                                        </div>
+                                        {m.remarks && <div className="mt-2 text-sm text-slate-600">Remarks: {m.remarks}</div>}
+                                    </td>
+                                </tr>
+                            )}
+                            </React.Fragment>
+                        ))}
+                        {filtered.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-6 py-8 text-center text-slate-400">No memorandum receipts found.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
     const [dateIssued, setDateIssued] = useState(new Date().toISOString().slice(0, 10));
@@ -1702,14 +1952,91 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
 };
 
 // --- Audit Modules ---
-const AuditList = ({ audits, onNavigate }: any) => (
+const AuditList = ({ audits, onNavigate, departments, locations }: any) => {
+    const [search, setSearch] = useState('');
+    const [status, setStatus] = useState('All');
+    const [scope, setScope] = useState('All');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [page, setPage] = useState(1);
+    const pageSize = 20;
+
+    const filtered = useMemo(() => {
+        const term = search.toLowerCase();
+        return audits.filter((a: AuditSession) => {
+            const matchesStatus = status === 'All' || a.status === status;
+            const scopeName = a.departmentId ? 'Department' : a.locationId ? 'Location' : 'All';
+            const matchesScope = scope === 'All' || scopeName === scope;
+            const matchesSearch = term === '' || a.sessionId.toLowerCase().includes(term) || a.description.toLowerCase().includes(term);
+            const ts = new Date(a.date).getTime();
+            const matchStart = startDate ? ts >= new Date(startDate).getTime() : true;
+            const matchEnd = endDate ? ts <= new Date(endDate).getTime() : true;
+            return matchesStatus && matchesScope && matchesSearch && matchStart && matchEnd;
+        });
+    }, [audits, status, scope, search, startDate, endDate]);
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const statusBadge = (s: string) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${s === 'Draft' ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-700'}`}>{s}</span>
+    );
+
+    const scopeLabel = (a: AuditSession) => {
+        if (a.departmentId) return departments.find((d: Department) => d.id === a.departmentId)?.name || 'Department';
+        if (a.locationId) return locations.find((l: Location) => l.id === a.locationId)?.name || 'Location';
+        return 'All';
+    };
+
+    const scopeChip = (a: AuditSession) => (
+        <span className="px-2 py-1 rounded-full text-xs bg-slate-100 text-slate-600">{scopeLabel(a)}</span>
+    );
+
+    const resetPage = () => setPage(1);
+
+    return (
     <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-wrap gap-3">
             <h1 className="text-2xl font-bold text-slate-800">Physical Counts</h1>
             <button onClick={() => onNavigate('audit-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
                 <Plus size={16} /> New Session
             </button>
         </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-end">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); resetPage(); }}
+                    placeholder="Search session ID or description..."
+                    className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[220px]"
+                />
+            </div>
+            <select value={status} onChange={(e) => { setStatus(e.target.value); resetPage(); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[140px]">
+                <option value="All">All Status</option>
+                <option value="Draft">Draft</option>
+                <option value="Finalized">Finalized</option>
+            </select>
+            <select value={scope} onChange={(e) => { setScope(e.target.value); resetPage(); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]">
+                <option value="All">All Scope</option>
+                <option value="Department">Department</option>
+                <option value="Location">Location</option>
+            </select>
+            <div className="flex gap-2 items-center text-sm text-slate-600 flex-wrap">
+                <div className="flex gap-2 items-center">
+                    <span className="text-slate-500">From</span>
+                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); resetPage(); }} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                </div>
+                <div className="flex gap-2 items-center">
+                    <span className="text-slate-500">To</span>
+                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); resetPage(); }} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                </div>
+            </div>
+        </div>
+
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
              <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
@@ -1717,28 +2044,91 @@ const AuditList = ({ audits, onNavigate }: any) => (
                         <th className="px-6 py-4">Session ID</th>
                         <th className="px-6 py-4">Date</th>
                         <th className="px-6 py-4">Description</th>
+                        <th className="px-6 py-4">Scope</th>
+                        <th className="px-6 py-4 text-center">Items</th>
                         <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                    {audits.map((a: AuditSession) => (
-                        <tr key={a.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onNavigate('audit-detail', a)}>
-                            <td className="px-6 py-3 font-medium text-[#006400]">{a.sessionId}</td>
-                            <td className="px-6 py-3 text-slate-500">{formatDate(a.date)}</td>
-                            <td className="px-6 py-3 text-slate-600">{a.description}</td>
-                             <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${a.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-[#006400]'}`}>{a.status}</span></td>
-                        </tr>
-                    ))}
-                    {audits.length === 0 && (
+                    {pageItems.map((a: AuditSession) => {
+                        const shortageCount = a.items?.filter((i: AuditItem) => i.status === 'Shortage').length || 0;
+                        const overageCount = a.items?.filter((i: AuditItem) => i.status === 'Overage').length || 0;
+                        return (
+                            <React.Fragment key={a.id}>
+                            <tr className="hover:bg-slate-50">
+                                <td className="px-6 py-3 font-medium text-[#006400]">{a.sessionId}</td>
+                                <td className="px-6 py-3 text-slate-500">{formatDate(a.date)}</td>
+                                <td className="px-6 py-3 text-slate-600">{a.description}</td>
+                                <td className="px-6 py-3 text-slate-600 flex items-center gap-2">{scopeChip(a)}</td>
+                                <td className="px-6 py-3 text-center text-slate-700">{a.items?.length || 0}</td>
+                                <td className="px-6 py-3">{statusBadge(a.status)}</td>
+                                <td className="px-6 py-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => setExpandedId(expandedId === a.id ? null : a.id)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="Preview"><ChevronRight size={16} className={`transition-transform ${expandedId === a.id ? 'rotate-90' : ''}`} /></button>
+                                        <button onClick={() => onNavigate('audit-detail', a)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Open"><Eye size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {expandedId === a.id && (
+                                <tr className="bg-slate-50/60">
+                                    <td colSpan={7} className="px-6 py-3">
+                                        <div className="text-xs text-slate-500 mb-2">Highlights</div>
+                                        <div className="flex gap-2 mb-2">
+                                            <span className="px-2 py-1 rounded-full text-xs bg-red-50 text-red-700">Shortages: {shortageCount}</span>
+                                            <span className="px-2 py-1 rounded-full text-xs bg-blue-50 text-blue-700">Overages: {overageCount}</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            {(a.items || []).slice(0, 4).map((item: AuditItem) => (
+                                                <div key={item.assetId} className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between">
+                                                    <div>
+                                                        <div className="font-semibold text-slate-800">{item.propertyNumber}</div>
+                                                        <div className="text-xs text-slate-500">{item.description}</div>
+                                                    </div>
+                                                    <div className={`text-right text-sm font-bold ${item.status === 'Shortage' ? 'text-red-600' : item.status === 'Overage' ? 'text-blue-600' : 'text-slate-600'}`}>
+                                                        {item.status === 'Uncounted' ? 'Uncounted' : item.shortageOverageQty}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(!a.items || a.items.length === 0) && <div className="text-slate-400 text-sm">No items</div>}
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                            </React.Fragment>
+                        );
+                    })}
+                    {pageItems.length === 0 && (
                         <tr>
-                            <td colSpan={4} className="px-6 py-8 text-center text-slate-400">No audit sessions found.</td>
+                            <td colSpan={7} className="px-6 py-8 text-center text-slate-400">No audit sessions found.</td>
                         </tr>
                     )}
                 </tbody>
             </table>
         </div>
+
+        <div className="flex items-center justify-between text-sm text-slate-600">
+            <div>Page {currentPage} of {totalPages}</div>
+            <div className="flex gap-2">
+                <button
+                    onClick={() => setPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded border ${currentPage === 1 ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:border-[#006400] hover:text-[#006400]'}`}
+                >
+                    Prev
+                </button>
+                <button
+                    onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1 rounded border ${currentPage === totalPages ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:border-[#006400] hover:text-[#006400]'}`}
+                >
+                    Next
+                </button>
+            </div>
+        </div>
     </div>
-);
+    );
+};
 
 const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }: any) => {
     const [sessionId] = useState(`PC-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`);
@@ -3487,6 +3877,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
         article: '', 
         description: '', 
         unit: '', 
+        unitValue: '',
         categoryId: '', 
         status: 'Active' 
     });
@@ -3502,6 +3893,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
             article: item.article,
             description: item.description,
             unit: item.unit,
+            unitValue: item.unitValue?.toString() || '',
             categoryId: item.categoryId,
             status: item.status
         });
@@ -3515,6 +3907,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
             article: '', 
             description: '', 
             unit: '', 
+            unitValue: '',
             categoryId: '', 
             status: 'Active' 
         });
@@ -3534,8 +3927,14 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
     };
 
     const handleSave = async () => {
-        if (!formData.article || !formData.description || !formData.unit || !formData.categoryId) {
-            setError('All fields are required.');
+        if (!formData.article || !formData.description || !formData.unit || !formData.categoryId || !formData.unitValue) {
+            setError('All fields are required, including unit cost.');
+            return;
+        }
+
+        const unitValNum = parseFloat(formData.unitValue);
+        if (Number.isNaN(unitValNum) || unitValNum < 0) {
+            setError('Unit cost must be a valid number.');
             return;
         }
 
@@ -3546,6 +3945,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
             itemType: 'Consumable',
             stockNumber: editingItem?.stockNumber || `SUP-${generateId()}`,
             quantity: editingItem?.quantity ?? 0,
+            unitValue: unitValNum,
         };
         try {
             if (editingItem) {
@@ -3683,6 +4083,16 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
                                         placeholder="e.g. ream"
                                         value={formData.unit}
                                         onChange={e => setFormData({...formData, unit: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Unit Cost <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
+                                        placeholder="e.g. 250"
+                                        value={formData.unitValue}
+                                        onChange={e => setFormData({...formData, unitValue: e.target.value})}
                                     />
                                 </div>
                             </div>
@@ -4032,7 +4442,7 @@ const App = () => {
               />;
           case 'asset-detail': return <AssetDetail asset={selectedAsset} catalog={catalog} departments={departments} locations={locations} employees={employees} funds={funds} onBack={() => { setSelectedAsset(null); setView('asset-registry'); }} />;
 
-          case 'transactions-list': return <StockTransactionList transactions={transactions} onNavigate={(view: ViewState, txn?: Transaction) => {
+          case 'transactions-list': return <StockTransactionList transactions={transactions} departments={departments} catalog={catalog} onNavigate={(view: ViewState, txn?: Transaction) => {
               if (view === 'transactions-detail' && txn) {
                   setSelectedTransaction(txn);
                   setView('transactions-detail');
@@ -4044,7 +4454,7 @@ const App = () => {
           case 'transactions-new': return <StockTransactionForm onSave={(data: any) => handleTransactionSave(data)} onCancel={() => setView('transactions-list')} catalog={catalog} departments={departments} isSaving={isSavingTransaction} />;
           case 'transactions-detail': return <StockTransactionDetail transaction={selectedTransaction} catalog={catalog} departments={departments} onBack={() => { setSelectedTransaction(null); setView('transactions-list'); }} />;
 
-          case 'mr-list': return <MRListView mrs={mrs} onNavigate={(view: ViewState, mr?: MemorandumReceipt) => {
+          case 'mr-list': return <MRListView mrs={mrs} employees={employees} onNavigate={(view: ViewState, mr?: MemorandumReceipt) => {
               if (view === 'mr-detail' && mr) {
                   setSelectedMR(mr);
                   setView('mr-detail');
@@ -4059,6 +4469,8 @@ const App = () => {
           case 'audit-list': 
               return <AuditList 
                   audits={audits} 
+                  departments={departments}
+                  locations={locations}
                   onNavigate={(view: ViewState, audit?: AuditSession) => {
                       if (audit) setActiveAudit(audit);
                       setView(view);
