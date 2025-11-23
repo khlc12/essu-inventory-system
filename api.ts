@@ -15,7 +15,8 @@ import {
   TransactionType,
   CatalogItem,
   Employee,
-  Department
+  Department,
+  LogEntry
 } from './types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:4000';
@@ -203,6 +204,18 @@ const normalizeEmployee = (raw: any): Employee => ({
   updatedAt: raw.updatedAt,
 });
 
+const normalizeLog = (raw: any): LogEntry => ({
+  id: raw.id,
+  timestamp: raw.timestamp,
+  userId: raw.userId,
+  username: raw.username,
+  role: raw.role,
+  action: raw.action,
+  module: raw.module,
+  referenceId: raw.referenceId,
+  description: raw.description,
+});
+
 export const bootstrapDataFromApi = async () => {
   const [
     departments,
@@ -215,6 +228,7 @@ export const bootstrapDataFromApi = async () => {
     mrs,
     audits,
     employees,
+    logs,
   ] = await Promise.all([
     fetchJson<any[]>('/api/departments'),
     fetchJson<any[]>('/api/locations'),
@@ -226,6 +240,7 @@ export const bootstrapDataFromApi = async () => {
     fetchJson<any[]>('/api/mrs'),
     fetchJson<any[]>('/api/audits'),
     fetchJson<any[]>('/api/employees'),
+    fetchJson<any[]>('/api/logs?limit=200'),
   ]);
 
   return {
@@ -239,6 +254,7 @@ export const bootstrapDataFromApi = async () => {
     mrs: mrs.map(normalizeMR),
     audits: audits.map(normalizeAudit),
     employees: employees.map(normalizeEmployee),
+    logs: logs.map(normalizeLog),
   };
 };
 
@@ -441,4 +457,18 @@ export const updateAuditSession = async (id: string, payload: any) => {
   }
   const json = await res.json();
   return normalizeAudit(json);
+};
+
+export const createActivityLog = async (payload: LogEntry) => {
+  const res = await fetch(`${API_BASE_URL}/api/logs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Failed to create activity log');
+  }
+  const json = await res.json();
+  return normalizeLog(json);
 };

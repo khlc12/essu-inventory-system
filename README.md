@@ -110,6 +110,8 @@ npm run dev            # starts API on http://localhost:4000
 - `GET /api/audits`
 - `POST /api/audits` (create)
 - `PUT /api/audits/:id` (update/finalize)
+- `GET /api/logs` (optional `?limit=200`)
+- `POST /api/logs` (create)
 
 > Note: The frontend still uses in-memory mock data. You can start wiring it to these endpoints by replacing the `INITIAL_*` state initializers with API calls.
 

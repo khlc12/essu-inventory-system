@@ -546,6 +546,35 @@ app.get('/api/audits', asyncHandler(async (_req, res) => {
   res.json(audits);
 }));
 
+app.get('/api/logs', asyncHandler(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+  const logs = await prisma.activityLog.findMany({
+    orderBy: { timestamp: 'desc' },
+    take: limit,
+  });
+  res.json(logs);
+}));
+
+app.post('/api/logs', asyncHandler(async (req, res) => {
+  const { userId, username, role, action, module, description, referenceId, timestamp } = req.body || {};
+  if (!userId || !username || !role || !action || !module || !description) {
+    return res.status(400).json({ message: 'userId, username, role, action, module, and description are required.' });
+  }
+  const log = await prisma.activityLog.create({
+    data: {
+      userId,
+      username,
+      role,
+      action,
+      module,
+      description,
+      referenceId: referenceId || '-',
+      timestamp: timestamp ? new Date(timestamp) : undefined,
+    },
+  });
+  res.status(201).json(log);
+}));
+
 app.post('/api/audits', asyncHandler(async (req, res) => {
   const { sessionId, date, departmentId, locationId, description, items = [], status = 'Draft', createdBy = 'System', createdAt } = req.body || {};
   if (!sessionId || !date || !description) {

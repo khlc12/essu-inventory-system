@@ -41,7 +41,8 @@ import {
   createTransaction,
   createMemorandumReceipt,
   createAuditSession,
-  updateAuditSession
+  updateAuditSession,
+  createActivityLog
 } from './api';
 import { 
   InventoryItem, 
@@ -703,9 +704,69 @@ const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
 
 // --- Activity Logs ---
 const ActivityLogView = ({ logs, setLogs }: any) => {
+    const [search, setSearch] = useState('');
+    const [filterModule, setFilterModule] = useState('All');
+    const [filterAction, setFilterAction] = useState('All');
+    const [page, setPage] = useState(1);
+    const pageSize = 25;
+
+    const modules = useMemo(() => ['All', ...Array.from(new Set(logs.map((l: LogEntry) => l.module))).sort()], [logs]);
+    const actions = useMemo(() => ['All', ...Array.from(new Set(logs.map((l: LogEntry) => l.action))).sort()], [logs]);
+
+    const filtered = useMemo(() => {
+        const term = search.toLowerCase();
+        return logs.filter((log: LogEntry) => {
+            const matchesModule = filterModule === 'All' || log.module === filterModule;
+            const matchesAction = filterAction === 'All' || log.action === filterAction;
+            const matchesSearch =
+                term === '' ||
+                log.description.toLowerCase().includes(term) ||
+                log.username.toLowerCase().includes(term) ||
+                log.referenceId.toLowerCase().includes(term);
+            return matchesModule && matchesAction && matchesSearch;
+        });
+    }, [logs, filterModule, filterAction, search]);
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const resetPagination = () => setPage(1);
+
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-slate-800">Activity Logs</h1>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800">Activity Logs</h1>
+                    <p className="text-sm text-slate-500">Showing {pageItems.length} of {filtered.length} log entries</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); resetPagination(); }}
+                            placeholder="Search description, user, reference..."
+                            className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                        />
+                    </div>
+                    <select
+                        value={filterModule}
+                        onChange={(e) => { setFilterModule(e.target.value); resetPagination(); }}
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                    >
+                        {modules.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select
+                        value={filterAction}
+                        onChange={(e) => { setFilterAction(e.target.value); resetPagination(); }}
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                    >
+                        {actions.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                </div>
+            </div>
+
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <table className="w-full text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
@@ -718,17 +779,52 @@ const ActivityLogView = ({ logs, setLogs }: any) => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {logs.map((log: LogEntry) => (
+                        {pageItems.map((log: LogEntry) => (
                             <tr key={log.id} className="hover:bg-slate-50">
                                 <td className="px-6 py-3 text-slate-500">{formatDateTime(log.timestamp)}</td>
                                 <td className="px-6 py-3 font-medium text-slate-800">{log.username}</td>
-                                <td className="px-6 py-3"><span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">{log.action}</span></td>
+                                <td className="px-6 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        log.action.toLowerCase().includes('delete') || log.action.toLowerCase().includes('archive')
+                                          ? 'bg-red-50 text-red-700'
+                                          : log.action.toLowerCase().includes('update') || log.action.toLowerCase().includes('finalize')
+                                          ? 'bg-amber-50 text-amber-700'
+                                          : 'bg-green-50 text-green-700'
+                                    }`}>
+                                        {log.action}
+                                    </span>
+                                </td>
                                 <td className="px-6 py-3 text-slate-600">{log.module}</td>
                                 <td className="px-6 py-3 text-slate-600">{log.description}</td>
                             </tr>
                         ))}
+                        {pageItems.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">No logs found.</td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
+            </div>
+
+            <div className="flex items-center justify-between text-sm text-slate-600">
+                <div>Page {currentPage} of {totalPages}</div>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className={`px-3 py-1 rounded border ${currentPage === 1 ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:border-[#006400] hover:text-[#006400]'}`}
+                    >
+                        Prev
+                    </button>
+                    <button
+                        onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
+                        className={`px-3 py-1 rounded border ${currentPage === totalPages ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:border-[#006400] hover:text-[#006400]'}`}
+                    >
+                        Next
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -3682,6 +3778,7 @@ const App = () => {
         setTransactions(data.transactions);
         setMrs(data.mrs);
         setAudits(data.audits);
+        setLogs(data.logs);
         setDataError(null);
       } catch (err) {
         console.error('API bootstrap failed, falling back to mock data.', err);
@@ -3696,6 +3793,7 @@ const App = () => {
         setTransactions(INITIAL_TRANSACTIONS);
         setMrs(INITIAL_MRS);
         setAudits(INITIAL_AUDITS);
+        setLogs(INITIAL_LOGS);
       } finally {
         setIsBootstrapping(false);
       }
@@ -3710,8 +3808,8 @@ const App = () => {
   const [activeAudit, setActiveAudit] = useState<AuditSession | null>(null);
   const [isSavingAsset, setIsSavingAsset] = useState(false);
   const [isSavingTransaction, setIsSavingTransaction] = useState(false);
-  
-  // Helper for logging
+
+  // Helper for logging (optimistic + backend)
   const handleLog = (action: string, module: string, description: string, referenceId?: string) => {
       const newLog: LogEntry = {
           id: generateId(),
@@ -3724,7 +3822,19 @@ const App = () => {
           description,
           referenceId: referenceId || '-'
       };
+      // Optimistic update
       setLogs([newLog, ...logs]);
+      // Persist to backend; if it succeeds, replace the temp log with saved data
+      createActivityLog(newLog)
+        .then(saved => {
+            setLogs((prev: LogEntry[]) => {
+                const withoutTemp = prev.filter(l => l.id !== newLog.id);
+                return [saved, ...withoutTemp];
+            });
+        })
+        .catch(() => {
+            // Keep optimistic entry if backend fails
+        });
   };
 
   const handleAssetSave = async (data: any) => {
