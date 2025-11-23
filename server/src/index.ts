@@ -429,12 +429,18 @@ app.get('/api/transactions', asyncHandler(async (_req, res) => {
 }));
 
 app.post('/api/transactions', asyncHandler(async (req, res) => {
-  const { transactionId, date, type, departmentId, locationId, items = [], status = 'Completed', remarks, createdBy = 'System' } = req.body || {};
-  if (!date || !type || !departmentId) {
-    return res.status(400).json({ message: 'date, type, and departmentId are required.' });
+  const { transactionId, date, type, departmentId, supplier, referenceNo, locationId, items = [], status = 'Completed', remarks, createdBy = 'System' } = req.body || {};
+  if (!date || !type) {
+    return res.status(400).json({ message: 'date and type are required.' });
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: 'At least one line item is required.' });
+  }
+  if (type === 'Stock In' && (!supplier || !referenceNo)) {
+    return res.status(400).json({ message: 'supplier and referenceNo are required for Stock In.' });
+  }
+  if (type === 'Stock Out' && !departmentId) {
+    return res.status(400).json({ message: 'departmentId is required for Stock Out.' });
   }
 
   for (const item of items) {
@@ -449,7 +455,9 @@ app.post('/api/transactions', asyncHandler(async (req, res) => {
         transactionId: transactionId || `TXN-${new Date(date).getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
         date: new Date(date),
         type: mapTransactionType(type),
-        departmentId,
+        departmentId: departmentId || null,
+        supplier: supplier || null,
+        referenceNo: referenceNo || null,
         locationId: locationId || null,
         status,
         remarks: remarks || null,

@@ -343,7 +343,9 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                 date: t.date,
                 type: t.type,
                 transactionId: t.transactionId,
-                department: departments.find((d: Department) => d.id === t.departmentId)?.name || 'Unknown',
+                source: t.type === 'Stock In'
+                  ? (t.supplier || 'Supplier')
+                  : (departments.find((d: Department) => d.id === t.departmentId)?.name || 'Unknown'),
                 itemName: catalog.find((c: CatalogItem) => c.id === item.catalogItemId)?.article || 'Unknown Item',
                 quantity: item.quantity,
                 remarks: item.remarks
@@ -451,7 +453,7 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                                     <th className="px-3 py-2 border border-slate-300">Transaction ID</th>
                                     <th className="px-3 py-2 border border-slate-300">Type</th>
                                     <th className="px-3 py-2 border border-slate-300">Item</th>
-                                    <th className="px-3 py-2 border border-slate-300">Department/Source</th>
+                                    <th className="px-3 py-2 border border-slate-300">Source</th>
                                     <th className="px-3 py-2 border border-slate-300 text-right">Qty</th>
                                 </tr>
                             </thead>
@@ -464,7 +466,7 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                                             <span className={`text-xs font-bold ${row.type === 'Stock In' ? 'text-green-700' : 'text-amber-700'}`}>{row.type.toUpperCase()}</span>
                                         </td>
                                         <td className="px-3 py-2 border border-slate-300">{row.itemName}</td>
-                                        <td className="px-3 py-2 border border-slate-300">{row.department}</td>
+                                        <td className="px-3 py-2 border border-slate-300">{row.source}</td>
                                         <td className="px-3 py-2 border border-slate-300 text-right font-bold">{row.quantity}</td>
                                     </tr>
                                 ))}
@@ -1351,7 +1353,7 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
                         <th className="px-6 py-4">Transaction ID</th>
                         <th className="px-6 py-4">Type</th>
                         <th className="px-6 py-4">Date</th>
-                        <th className="px-6 py-4">Department</th>
+                        <th className="px-6 py-4">Source / Department</th>
                         <th className="px-6 py-4">Items</th>
                         <th className="px-6 py-4">Status</th>
                         <th className="px-6 py-4 text-right">Actions</th>
@@ -1372,7 +1374,9 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
                                     </span>
                                 </td>
                                 <td className="px-6 py-3 text-slate-500">{formatDate(t.date)}</td>
-                                <td className="px-6 py-3 text-slate-600">{dept ? dept.name : t.departmentId}</td>
+                                <td className="px-6 py-3 text-slate-600">
+                                    {t.type === 'Stock In' ? (t.supplier || '-') : (dept ? dept.name : t.departmentId || '-')}
+                                </td>
                                 <td className="px-6 py-3 text-slate-600">{itemCount} items / {totalQty} qty</td>
                                 <td className="px-6 py-3">{statusBadge(t.status)}</td>
                                 <td className="px-6 py-3 text-right">
@@ -1445,6 +1449,8 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
     const [type, setType] = useState<TransactionType>('Stock In');
     const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
     const [departmentId, setDepartmentId] = useState<string>('');
+    const [supplier, setSupplier] = useState<string>('');
+    const [referenceNo, setReferenceNo] = useState<string>('');
     const [remarks, setRemarks] = useState<string>('');
     const [lineItems, setLineItems] = useState<any[]>([]);
     const [error, setError] = useState<string>('');
@@ -1464,8 +1470,16 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
     };
 
     const handleSave = () => {
-        if (!departmentId || !date || !type) {
-            setError('Please fill in Transaction Type, Date, and Department.');
+        if (!date || !type) {
+            setError('Please fill in Transaction Type and Date.');
+            return;
+        }
+        if (type === 'Stock In' && (!supplier || !referenceNo)) {
+            setError('Supplier and Reference No. are required for Stock In.');
+            return;
+        }
+        if (type === 'Stock Out' && !departmentId) {
+            setError('Department is required for Stock Out.');
             return;
         }
         if (lineItems.length === 0) {
@@ -1482,7 +1496,9 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
         onSave({
             type,
             date,
-            departmentId,
+            departmentId: type === 'Stock Out' ? departmentId : undefined,
+            supplier: type === 'Stock In' ? supplier : undefined,
+            referenceNo: type === 'Stock In' ? referenceNo : undefined,
             items: lineItems.map((i: any) => ({ catalogItemId: i.catalogItemId, quantity: i.quantity, remarks: i.remarks })),
             remarks,
         });
@@ -1509,13 +1525,26 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
                     <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={date} onChange={(e) => setDate(e.target.value)} />
                  </div>
              </div>
-             <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-1">Department / Source</label>
-                 <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-                     <option value="">Select Department...</option>
-                     {departments.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                 </select>
-             </div>
+             {type === 'Stock Out' ? (
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Department / Destination</label>
+                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+                        <option value="">Select Department...</option>
+                        {departments.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                </div>
+             ) : (
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Supplier / Manufacturer</label>
+                        <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. ABC Supplies" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Reference No. (PO/DR)</label>
+                        <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} placeholder="e.g. PO-2025-001" />
+                    </div>
+                </div>
+             )}
              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Remarks</label>
                 <input type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional notes" />
@@ -1600,7 +1629,12 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
                     <div>
                         <h1 className="text-2xl font-bold text-slate-800">{transaction.type} Transaction</h1>
                         <div className="text-slate-500">ID: {transaction.transactionId}</div>
-                        <div className="text-slate-500">Department: {dept ? dept.name : transaction.departmentId}</div>
+                        {transaction.type === 'Stock In' ? (
+                          <div className="text-slate-500">Supplier: {transaction.supplier || '-'}</div>
+                        ) : (
+                          <div className="text-slate-500">Department: {dept ? dept.name : transaction.departmentId || '-'}</div>
+                        )}
+                        {transaction.referenceNo && <div className="text-slate-500">Reference: {transaction.referenceNo}</div>}
                         {transaction.remarks && <div className="text-slate-500">Remarks: {transaction.remarks}</div>}
                     </div>
                     <div className="text-right">

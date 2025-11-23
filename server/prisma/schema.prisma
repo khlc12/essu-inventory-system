@@ -194,8 +194,10 @@ model Transaction {
   transactionId String             @unique
   date          DateTime
   type          TransactionType
-  departmentId  String
-  department    Department         @relation(fields: [departmentId], references: [id])
+  departmentId  String?
+  department    Department?        @relation(fields: [departmentId], references: [id])
+  supplier      String?
+  referenceNo   String?
   locationId    String?
   location      Location?          @relation(fields: [locationId], references: [id])
   status        TransactionStatus

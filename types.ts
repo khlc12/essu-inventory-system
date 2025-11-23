@@ -145,7 +145,9 @@ export interface Transaction {
   transactionId: string; // Readable ID e.g. TXN-2024-001
   date: string;
   type: TransactionType;
-  departmentId: string; // Requester or Source
+  departmentId?: string; // Requester (Stock Out) or Source
+  supplier?: string; // For Stock In
+  referenceNo?: string; // PO/DR/Invoice
   locationId?: string;
   items: TransactionItem[];
   status: TransactionStatus;
