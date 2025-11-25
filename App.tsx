@@ -195,6 +195,7 @@ type ConfirmOptions = {
 };
 
 const ConfirmContext = React.createContext<(opts: ConfirmOptions) => Promise<boolean>>(async () => false);
+const SuccessContext = React.createContext<(msg: string | null) => void>(() => {});
 
 const ConfirmDialog = ({ state, onResolve }: { state: { open: boolean; options?: ConfirmOptions }, onResolve: (result: boolean) => void }) => {
   if (!state.open || !state.options) return null;
@@ -2641,6 +2642,7 @@ const AuditReport = ({ audit, onBack }: any) => {
 // --- Master Data Views ---
 const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
     const [formData, setFormData] = useState({ 
@@ -2715,10 +2717,12 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                 const updated = await updateEmployee(editingEmployee.id, formData);
                 setEmployees(employees.map((e: Employee) => e.id === editingEmployee.id ? updated : e));
                 if (onLog) onLog('Updated Employee', 'Master Data', `Updated employee: ${formData.employeeId}`, editingEmployee.id);
+                success('Employee updated successfully.');
             } else {
                 const created = await createEmployee(formData);
                 setEmployees([...employees, created]);
                 if (onLog) onLog('Created Employee', 'Master Data', `Created employee: ${formData.employeeId}`, created.id);
+                success('Employee created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
@@ -2906,6 +2910,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
 
 const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingDept, setEditingDept] = useState<Department | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', head: '', locationId: '', status: 'Active' });
@@ -2971,10 +2976,12 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
                 const updated = await updateDepartment(editingDept.id, formData);
                 setDepartments(departments.map((d: Department) => d.id === editingDept.id ? updated : d));
                 if (onLog) onLog('Updated Department', 'Master Data', `Updated department: ${formData.code}`, editingDept.id);
+                success('Department updated successfully.');
             } else {
                 const created = await createDepartment(formData);
                 setDepartments([...departments, created]);
                 if (onLog) onLog('Created Department', 'Master Data', `Created department: ${formData.code}`, created.id);
+                success('Department created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
@@ -3135,6 +3142,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
 
 const LocationMasterView = ({ locations, setLocations, onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingLoc, setEditingLoc] = useState<Location | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', description: '', status: 'Active' });
@@ -3199,10 +3207,12 @@ const LocationMasterView = ({ locations, setLocations, onLog, userRole }: any) =
                 const updated = await updateLocation(editingLoc.id, formData);
                 setLocations(locations.map((l: Location) => l.id === editingLoc.id ? updated : l));
                 if (onLog) onLog('Updated Location', 'Master Data', `Updated location: ${formData.code}`, editingLoc.id);
+                success('Location updated successfully.');
             } else {
                 const created = await createLocation(formData);
                 setLocations([...locations, created]);
                 if (onLog) onLog('Created Location', 'Master Data', `Created location: ${formData.code}`, created.id);
+                success('Location created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
@@ -3347,6 +3357,7 @@ const LocationMasterView = ({ locations, setLocations, onLog, userRole }: any) =
 
 const FundClusterMasterView = ({ funds, setFunds, onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingFund, setEditingFund] = useState<FundCluster | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', description: '', status: 'Active' });
@@ -3409,10 +3420,12 @@ const FundClusterMasterView = ({ funds, setFunds, onLog, userRole }: any) => {
                 const updated = await updateFund(editingFund.id, formData);
                 setFunds(funds.map((f: FundCluster) => f.id === editingFund.id ? updated : f));
                 if (onLog) onLog('Updated Fund Cluster', 'Master Data', `Updated fund cluster: ${formData.code}`, editingFund.id);
+                success('Fund cluster updated successfully.');
             } else {
                 const created = await createFund(formData);
                 setFunds([...funds, created]);
                 if (onLog) onLog('Created Fund Cluster', 'Master Data', `Created fund cluster: ${formData.code}`, created.id);
+                success('Fund cluster created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
@@ -3557,6 +3570,7 @@ const FundClusterMasterView = ({ funds, setFunds, onLog, userRole }: any) => {
 
 const CategoryMasterView = ({ categories, setCategories, onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<AssetCategory | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', description: '', type: 'PPE', status: 'Active' });
@@ -3620,10 +3634,12 @@ const CategoryMasterView = ({ categories, setCategories, onLog, userRole }: any)
                 const updated = await updateCategory(editingCategory.id, formData);
                 setCategories(categories.map((c: AssetCategory) => c.id === editingCategory.id ? updated : c));
                 if (onLog) onLog('Updated Category', 'Master Data', `Updated category: ${formData.code}`, editingCategory.id);
+                success('Category updated successfully.');
             } else {
                 const created = await createCategory(formData);
                 setCategories([...categories, created]);
                 if (onLog) onLog('Created Category', 'Master Data', `Created category: ${formData.code}`, created.id);
+                success('Category created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
@@ -3782,6 +3798,7 @@ const CategoryMasterView = ({ categories, setCategories, onLog, userRole }: any)
 
 const PPECatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
     const [formData, setFormData] = useState<any>({ 
@@ -3858,10 +3875,12 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: an
                 const updated = await updateCatalogItem(editingItem.id, payload);
                 setCatalog(catalog.map((c: CatalogItem) => c.id === editingItem.id ? updated : c));
                 if (onLog) onLog('Updated PPE Item', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
+                success('PPE item updated successfully.');
             } else {
                 const created = await createCatalogItem(payload);
                 setCatalog([...catalog, created]);
                 if (onLog) onLog('Created PPE Item', 'Master Data', `Created item: ${formData.article}`, created.id);
+                success('PPE item created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
@@ -4037,6 +4056,7 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: an
 
 const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
     const [formData, setFormData] = useState<any>({ 
@@ -4123,10 +4143,12 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog, userRo
                 const updated = await updateCatalogItem(editingItem.id, payload);
                 setCatalog(catalog.map((c: CatalogItem) => c.id === editingItem.id ? updated : c));
                 if (onLog) onLog('Updated Consumable', 'Master Data', `Updated item: ${formData.article}`, editingItem.id);
+                success('Consumable updated successfully.');
             } else {
                 const created = await createCatalogItem(payload);
                 setCatalog([...catalog, created]);
                 if (onLog) onLog('Created Consumable', 'Master Data', `Created item: ${formData.article}`, created.id);
+                success('Consumable created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
@@ -4358,6 +4380,7 @@ const App = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS as AppNotification[]);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedMR, setSelectedMR] = useState<MemorandumReceipt | null>(null);
@@ -4382,9 +4405,9 @@ const App = () => {
         setIsBootstrapping(false);
         return;
       }
-      setIsBootstrapping(true);
-      try {
-        const data = await bootstrapDataFromApi(userRole);
+          setIsBootstrapping(true);
+          try {
+            const data = await bootstrapDataFromApi(userRole);
         setDepartments(data.departments);
         setEmployees(data.employees);
         setLocations(data.locations);
@@ -4399,8 +4422,9 @@ const App = () => {
         setSettings(data.settings || settings);
         setLastSavedSettings(data.settings || settings);
         setUsers(data.users || []);
-        setDataError(null);
-      } catch (err) {
+            setDataError(null);
+            setSuccessMessage(null);
+          } catch (err) {
         if ((err as any)?.status === 401) {
           handleAuthError();
           return;
@@ -4425,6 +4449,13 @@ const App = () => {
     };
     load();
   }, [isAuthenticated, auth?.token, userRole]);
+
+  // Auto-hide success banner after a short delay
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => setSuccessMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
 
   // Derive notifications (low stock + recent activity)
   useEffect(() => {
@@ -4503,10 +4534,12 @@ const App = () => {
               const updated = await updateAsset(editingAsset.id, payload);
               setAssets(assets.map((a: Asset) => a.id === editingAsset.id ? updated : a));
               handleLog('Updated Asset', 'Asset Registry', `Updated asset ${updated.propertyNumber}`, editingAsset.id);
+              setSuccessMessage('Asset updated successfully.');
           } else {
               const created = await createAsset(payload);
               setAssets([...assets, created]);
               handleLog('Registered Asset', 'Asset Registry', `Registered new asset ${created.propertyNumber}`, created.id);
+              setSuccessMessage('Asset created successfully.');
           }
           setEditingAsset(null);
           setView('asset-registry');
@@ -4543,6 +4576,7 @@ const App = () => {
               }));
           }
           handleLog('Recorded Transaction', 'Stock Transactions', `Recorded new stock ${data.type.toLowerCase()}`, created.id);
+          setSuccessMessage('Transaction recorded successfully.');
           setView('transactions-list');
       } finally {
           setIsSavingTransaction(false);
@@ -4555,6 +4589,7 @@ const App = () => {
           const created = await createMemorandumReceipt(data);
           setMrs([created, ...mrs]);
           handleLog('Issued MR', 'Memorandum Receipt', `Issued ${created.mrNumber}`, created.id);
+          setSuccessMessage('Memorandum Receipt issued successfully.');
           setView('mr-list');
       } catch (err: any) {
           setDataError(err?.message || 'Failed to issue MR.');
@@ -4569,6 +4604,7 @@ const App = () => {
       setIsAuthenticated(false);
       setAuthToken(null);
       localStorage.removeItem('auth');
+      setSuccessMessage('Signed out.');
   };
 
   const handleAuthLogin = async (username: string, password: string) => {
@@ -4577,13 +4613,16 @@ const App = () => {
       setIsAuthenticated(true);
       setAuthToken(result.token);
       localStorage.setItem('auth', JSON.stringify(result));
+      setSuccessMessage('Signed in successfully.');
   };
 
   if (!isAuthenticated) {
       return (
         <ConfirmContext.Provider value={requestConfirm}>
-          <LandingPage onLogin={handleAuthLogin} />
-          <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+          <SuccessContext.Provider value={setSuccessMessage}>
+            <LandingPage onLogin={handleAuthLogin} />
+            <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+          </SuccessContext.Provider>
         </ConfirmContext.Provider>
       );
   }
@@ -4591,12 +4630,14 @@ const App = () => {
   if (isAuthenticated && isBootstrapping) {
       return (
         <ConfirmContext.Provider value={requestConfirm}>
-          <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-600">
-              <div className="flex items-center gap-3 text-sm font-medium">
-                  <Loader2 className="animate-spin" /> Loading data from server...
-              </div>
-          </div>
-          <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+          <SuccessContext.Provider value={setSuccessMessage}>
+            <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-600">
+                <div className="flex items-center gap-3 text-sm font-medium">
+                    <Loader2 className="animate-spin" /> Loading data from server...
+                </div>
+            </div>
+            <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+          </SuccessContext.Provider>
         </ConfirmContext.Provider>
       );
   }
@@ -4696,6 +4737,7 @@ const App = () => {
                           const saved = await updateSettingsApi(s);
                           setLastSavedSettings(saved);
                           handleLog('Updated Settings', 'Settings', 'Updated system settings');
+                          setSuccessMessage('Settings saved successfully.');
                           setDataError(null);
                       } catch (err: any) {
                           setDataError(err?.message || 'Failed to save settings.');
@@ -4705,11 +4747,13 @@ const App = () => {
                       const created = await createUser(payload);
                       setUsers([...users, created]);
                       handleLog('Created User', 'Settings', `Created user ${created.username}`, created.id);
+                      setSuccessMessage('User created successfully.');
                   }}
                   onUpdateUser={async (id: string, payload: any) => {
                       const updated = await updateUser(id, payload);
                       setUsers(users.map(u => u.id === id ? updated : u));
                       handleLog('Updated User', 'Settings', `Updated user ${updated.username}`, updated.id);
+                      setSuccessMessage('User updated successfully.');
                   }}
                   onLog={handleLog} 
               />;
@@ -4799,6 +4843,7 @@ const App = () => {
                           setAudits([created, ...audits]);
                           setActiveAudit(created);
                           handleLog('Created Audit', 'Physical Count', `Created session ${created.sessionId}`, created.id);
+                          setSuccessMessage('Audit session created successfully.');
                           setView('audit-detail');
                       } catch (err: any) {
                           setDataError(err?.message || 'Failed to create audit session.');
@@ -4818,7 +4863,7 @@ const App = () => {
                   return <AuditWorksheet 
                       audit={activeAudit} 
                       onBack={() => setView('audit-list')} 
-                      onSaveDraft={async (updated: AuditSession) => {
+                  onSaveDraft={async (updated: AuditSession) => {
                           setIsSavingAudit(true);
                           try {
                               const saved = await updateAuditSession(updated.id, { ...updated, status: 'Draft' });
@@ -4826,6 +4871,7 @@ const App = () => {
                               setAudits(newAudits);
                               setActiveAudit(saved);
                               handleLog('Updated Audit', 'Physical Count', `Saved draft for ${saved.sessionId}`, saved.id);
+                              setSuccessMessage('Audit draft saved.');
                           } catch (err: any) {
                               setDataError(err?.message || 'Failed to save audit draft.');
                           } finally {
@@ -4840,6 +4886,7 @@ const App = () => {
                               setAudits(newAudits as AuditSession[]);
                               setActiveAudit(finalized as AuditSession);
                               handleLog('Finalized Audit', 'Physical Count', `Finalized session ${finalized.sessionId}`, finalized.id);
+                              setSuccessMessage('Audit finalized successfully.');
                           } catch (err: any) {
                               setDataError(err?.message || 'Failed to finalize audit.');
                           } finally {
@@ -4865,6 +4912,7 @@ const App = () => {
 
   return (
     <ConfirmContext.Provider value={requestConfirm}>
+    <SuccessContext.Provider value={setSuccessMessage}>
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden print:bg-white print:h-auto print:block">
         <aside className={`bg-[#006400] text-white flex flex-col transition-all duration-300 print:hidden ${isSidebarCollapsed ? 'w-16' : 'w-64'} shadow-2xl z-20`}>
              <div className="p-4 flex items-center justify-between border-b border-green-800/30 h-16 shrink-0">
@@ -4992,6 +5040,11 @@ const App = () => {
                             {dataError}
                         </div>
                     )}
+                    {successMessage && (
+                        <div className="mb-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm font-medium">
+                            {successMessage}
+                        </div>
+                    )}
                     {renderContent()}
                 </div>
                 <div className="mt-12 pt-6 border-t border-slate-200 text-center text-slate-400 text-xs print:hidden">
@@ -5001,6 +5054,7 @@ const App = () => {
         </main>
     </div>
     <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+    </SuccessContext.Provider>
     </ConfirmContext.Provider>
   );
 }
