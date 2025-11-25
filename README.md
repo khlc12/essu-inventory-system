@@ -2,16 +2,10 @@
 
 A comprehensive, web-based inventory management prototype designed for the Eastern Samar State University (ESSU) Supply Office. This system digitizes the management of Property, Plant, and Equipment (PPE), consumable supplies, physical audits, and accountability issuance.
 
-## 🎨 Branding
-The system adheres to the official ESSU visual identity:
-*   **Primary Color:** ESSU Green (`#006400`)
-*   **Accent Color:** Gold/Yellow (`#EAB308`)
-
-## 🔑 Access Credentials
-*   **Username:** `admin`
-*   **Password:** `password`
-
----
+## 🔑 Access / Roles
+Authentication and role-based access are now enabled.
+- Officer: `officer / admin123` (full access)
+- Staff: `staff / staff123` (no delete, limited settings)
 
 ## 🚀 Key Features
 
@@ -65,6 +59,8 @@ Dedicated reporting module with export/print capabilities:
 *   **Settings:** Configure system name, logo, reorder thresholds, and document signatories.
 *   **Activity Logs:** Full audit trail of all Create, Update, Delete, and Export actions.
 *   **Database Export:** JSON export of current state.
+*   **User Management:** Officer can create/deactivate Staff accounts.
+*   **Success/Confirm UX:** Custom confirmation dialogs and success banners across mutations; logout requires confirmation.
 
 ---
 
@@ -75,7 +71,7 @@ Dedicated reporting module with export/print capabilities:
 *   **State Management:** Local State (Prototype) / In-Memory Mock Data
 
 ## 🗄️ Backend (MySQL + Express/Prisma)
-A starter backend now lives in `server/` using Express, Prisma ORM, and MySQL.
+A backend lives in `server/` using Express, Prisma ORM, and MySQL. Authentication uses JWT; mutating routes require a valid token, and some routes are Officer-only.
 
 ### Requirements
 - Node.js 18+
@@ -87,7 +83,7 @@ cd server
 cp .env.example .env   # update DATABASE_URL/JWT_SECRET if needed
 npm install
 npx prisma generate
-npx prisma migrate dev --name init
+npx prisma migrate dev --name init   # plus subsequent migrations already present
 npm run seed           # loads the mock data from the existing frontend constants
 npm run dev            # starts API on http://localhost:4000
 ```
@@ -112,14 +108,25 @@ npm run dev            # starts API on http://localhost:4000
 - `PUT /api/audits/:id` (update/finalize)
 - `GET /api/logs` (optional `?limit=200`)
 - `POST /api/logs` (create)
+- `GET /api/settings`, `PUT /api/settings` (Officer)
+- `GET /api/users`, `POST /api/users`, `PUT /api/users/:id` (Officer)
 
-> Note: The frontend still uses in-memory mock data. You can start wiring it to these endpoints by replacing the `INITIAL_*` state initializers with API calls.
+> Note: The frontend now uses the API by default (token-based). If auth fails, it falls back to mock data and shows a warning. Ensure `VITE_API_BASE_URL` is set and the backend is running.
 
 ### Frontend -> Backend
 Create a `.env` in the project root with `VITE_API_BASE_URL=http://localhost:4000`, then run `npm run dev` from the root to have the frontend pull data from the backend.
+
+### Frontend Scripts (root)
+```bash
+npm install        # install deps
+npm run dev        # start Vite dev server (http://localhost:3000)
+npm run build      # production build
+npm run preview    # preview production build locally
+```
 
 ## 📂 Project Structure
 *   `App.tsx`: Main application controller, routing, and all view components.
 *   `types.ts`: TypeScript interfaces for all data entities (Asset, Transaction, Audit, etc.).
 *   `constants.ts`: Initial mock data and sample records.
 *   `index.tsx`: Entry point.
+*   `server/`: Express + Prisma API with MySQL backend.
