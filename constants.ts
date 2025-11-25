@@ -385,9 +385,6 @@ export const INITIAL_SETTINGS: SystemSettings = {
     receivedBy: 'Juan Dela Cruz',
     verifiedBy: 'Head of Agency'
   },
-  users: {
-    defaultRole: 'Staff'
-  },
   notifications: {
     enableLowStockAlerts: true,
     enableInactivityWarning: false,

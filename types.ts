@@ -249,6 +249,16 @@ export interface LogEntry {
   description: string; // Details of the action
 }
 
+// --- Users ---
+export interface AppUser {
+  id: string;
+  username: string;
+  role: 'Officer' | 'Staff';
+  status: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // --- System Settings Type ---
 
 export interface SystemSettings {
@@ -268,9 +278,6 @@ export interface SystemSettings {
     preparedBy: string;
     receivedBy: string;
     verifiedBy: string;
-  };
-  users: {
-    defaultRole: string;
   };
   notifications: {
     enableLowStockAlerts: boolean;

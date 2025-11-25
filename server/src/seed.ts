@@ -67,6 +67,7 @@ const resolveCategoryId = (value: string) =>
   categoryById.get(value) ?? categoryByCode.get(value) ?? value;
 const resolveCatalogItemId = (value: string) => catalogById.get(value) ?? value;
 const resolveEmployeeId = (value: string) => employeeById.get(value) ?? value;
+const resolveUserId = (value: string) => value === 'E001' ? 'U-OFFICER' : value;
 
 async function main() {
   console.log('Resetting database...');
@@ -87,15 +88,24 @@ async function main() {
   await prisma.systemSettings.deleteMany();
   await prisma.user.deleteMany();
 
-  console.log('Seeding base user...');
-  await prisma.user.create({
-    data: {
-      id: 'E001',
-      username: 'admin',
-      passwordHash: 'changeme',
-      role: 'Admin',
-      status: Status.Active,
-    },
+  console.log('Seeding base users...');
+  await prisma.user.createMany({
+    data: [
+      {
+        id: 'U-OFFICER',
+        username: 'officer',
+        passwordHash: 'admin123',
+        role: 'Officer',
+        status: Status.Active,
+      },
+      {
+        id: 'U-STAFF',
+        username: 'staff',
+        passwordHash: 'staff123',
+        role: 'Staff',
+        status: Status.Active,
+      }
+    ]
   });
 
   console.log('Seeding locations...');
@@ -315,7 +325,7 @@ async function main() {
       data: {
         id: log.id,
         timestamp: toDate(log.timestamp),
-        userId: log.userId,
+        userId: resolveUserId(log.userId),
         username: log.username,
         role: log.role,
         action: log.action,
@@ -333,7 +343,6 @@ async function main() {
       general: INITIAL_SETTINGS.general,
       inventory: INITIAL_SETTINGS.inventory,
       documents: INITIAL_SETTINGS.documents,
-      users: INITIAL_SETTINGS.users,
       notifications: INITIAL_SETTINGS.notifications,
     },
   });

@@ -14,15 +14,18 @@ import {
   TransactionItem,
   TransactionType,
   CatalogItem,
-  Employee,
-  Department,
   LogEntry
 } from './types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:4000';
 
+let authToken: string | null = null;
+export const setAuthToken = (token: string | null) => { authToken = token; };
+
+const authHeaders = () => (authToken ? { Authorization: `Bearer ${authToken}` } : {});
+
 const fetchJson = async <T>(path: string): Promise<T> => {
-  const res = await fetch(`${API_BASE_URL}${path}`);
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { ...authHeaders() } });
   if (!res.ok) {
     throw new Error(`Request failed: ${res.status} ${res.statusText}`);
   }
@@ -218,7 +221,24 @@ const normalizeLog = (raw: any): LogEntry => ({
   description: raw.description,
 });
 
-export const bootstrapDataFromApi = async () => {
+const normalizeUser = (raw: any) => ({
+  id: raw.id,
+  username: raw.username,
+  role: raw.role,
+  status: raw.status,
+  createdAt: raw.createdAt,
+  updatedAt: raw.updatedAt,
+});
+
+export const bootstrapDataFromApi = async (role: string = 'Officer') => {
+  // Only Officers can fetch users; staff will skip this call to avoid 403.
+  const safeUsers = role === 'Officer'
+    ? fetchJson<any[]>('/api/users').catch((err) => {
+        console.warn('Users fetch failed, defaulting to empty list.', err);
+        return [];
+      })
+    : Promise.resolve([]);
+
   const [
     departments,
     locations,
@@ -231,6 +251,8 @@ export const bootstrapDataFromApi = async () => {
     audits,
     employees,
     logs,
+    settings,
+    users,
   ] = await Promise.all([
     fetchJson<any[]>('/api/departments'),
     fetchJson<any[]>('/api/locations'),
@@ -243,6 +265,8 @@ export const bootstrapDataFromApi = async () => {
     fetchJson<any[]>('/api/audits'),
     fetchJson<any[]>('/api/employees'),
     fetchJson<any[]>('/api/logs?limit=200'),
+    fetchJson<any>('/api/settings'),
+    safeUsers,
   ]);
 
   return {
@@ -257,6 +281,8 @@ export const bootstrapDataFromApi = async () => {
     audits: audits.map(normalizeAudit),
     employees: employees.map(normalizeEmployee),
     logs: logs.map(normalizeLog),
+    settings,
+    users: users.map(normalizeUser),
   };
 };
 
@@ -265,7 +291,7 @@ const toApiStatus = (status: AssetStatus) => (status === 'Under Repair' ? 'Under
 export const createAsset = async (payload: Partial<Asset>) => {
   const res = await fetch(`${API_BASE_URL}/api/assets`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
       ...payload,
       unitValue: payload.unitValue,
@@ -284,7 +310,7 @@ export const createAsset = async (payload: Partial<Asset>) => {
 export const updateAsset = async (id: string, payload: Partial<Asset>) => {
   const res = await fetch(`${API_BASE_URL}/api/assets/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
       ...payload,
       unitValue: payload.unitValue,
@@ -307,7 +333,7 @@ const toApiTxnType = (type: TransactionType) => (type === 'Stock In' ? 'Stock In
 const postJson = async <T>(path: string, body: any): Promise<T> => {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -320,7 +346,7 @@ const postJson = async <T>(path: string, body: any): Promise<T> => {
 const putJson = async <T>(path: string, body: any): Promise<T> => {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -333,6 +359,7 @@ const putJson = async <T>(path: string, body: any): Promise<T> => {
 const delJson = async <T>(path: string): Promise<T> => {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'DELETE',
+    headers: { ...authHeaders() },
   });
   if (!res.ok) {
     const text = await res.text();
@@ -401,10 +428,33 @@ export const updateEmployee = async (id: string, payload: Partial<Employee>) =>
 export const deactivateEmployee = async (id: string) =>
   normalizeEmployee(await delJson(`/api/employees/${id}`));
 
+export const login = async (username: string, password: string) => {
+  const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    let errorMessage = 'Login failed';
+    try {
+      const json = await res.json();
+      if (json?.message) errorMessage = json.message;
+    } catch {
+      const text = await res.text();
+      if (text) errorMessage = text;
+    }
+    if (res.status === 401) errorMessage = 'Invalid username or password.';
+    else if (res.status === 403) errorMessage = 'Account is inactive. Please contact an officer to re-enable access.';
+    throw new Error(errorMessage);
+  }
+  const json = await res.json();
+  return json;
+};
+
 export const createTransaction = async (payload: Partial<Transaction>) => {
   const res = await fetch(`${API_BASE_URL}/api/transactions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
       ...payload,
       type: payload.type ? toApiTxnType(payload.type) : 'Stock In',
@@ -421,7 +471,7 @@ export const createTransaction = async (payload: Partial<Transaction>) => {
 export const createMemorandumReceipt = async (payload: any) => {
   const res = await fetch(`${API_BASE_URL}/api/mrs`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -436,7 +486,7 @@ export const createMemorandumReceipt = async (payload: any) => {
 export const createAuditSession = async (payload: any) => {
   const res = await fetch(`${API_BASE_URL}/api/audits`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -450,7 +500,7 @@ export const createAuditSession = async (payload: any) => {
 export const updateAuditSession = async (id: string, payload: any) => {
   const res = await fetch(`${API_BASE_URL}/api/audits/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -464,7 +514,7 @@ export const updateAuditSession = async (id: string, payload: any) => {
 export const createActivityLog = async (payload: LogEntry) => {
   const res = await fetch(`${API_BASE_URL}/api/logs`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -474,3 +524,16 @@ export const createActivityLog = async (payload: LogEntry) => {
   const json = await res.json();
   return normalizeLog(json);
 };
+
+export const getSettings = async () => {
+  return fetchJson<any>('/api/settings');
+};
+
+export const updateSettingsApi = async (payload: any) => {
+  return putJson<any>('/api/settings', payload);
+};
+
+// Users (Officer-only)
+export const getUsers = async () => fetchJson<any[]>('/api/users');
+export const createUser = async (payload: any) => postJson<any>('/api/users', payload);
+export const updateUser = async (id: string, payload: any) => putJson<any>(`/api/users/${id}`, payload);

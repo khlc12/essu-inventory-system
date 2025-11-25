@@ -301,7 +301,6 @@ model SystemSettings {
   general       Json
   inventory     Json
   documents     Json
-  users         Json
   notifications Json
   updatedAt     DateTime @updatedAt
 }

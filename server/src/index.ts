@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import asyncHandler from 'express-async-handler';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
+import { authMiddleware, requireRole, signToken } from './auth';
+import { authMiddleware, requireRole, signToken } from './auth';
 
 dotenv.config();
 
@@ -12,6 +14,39 @@ const port = process.env.PORT ? Number(process.env.PORT) : 4000;
 
 app.use(cors());
 app.use(express.json());
+
+// Apply auth to mutating routes
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'DELETE'].includes(req.method) && !req.path.startsWith('/api/auth')) {
+    return authMiddleware(req, res, next);
+  }
+  return next();
+});
+
+const ensureRole = (req: Request, res: Response, roles: string[]) => {
+  const user = (req as any).user as any;
+  if (!user || !roles.includes(user.role)) {
+    res.status(403).json({ message: 'Forbidden' });
+    return false;
+  }
+  return true;
+};
+
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ message: 'username and password are required' });
+  }
+  const user = await prisma.user.findUnique({ where: { username } });
+  if (!user || user.passwordHash !== password) {
+    return res.status(401).json({ message: 'Invalid credentials' });
+  }
+  if (user.status !== 'Active') {
+    return res.status(403).json({ message: 'Account is inactive' });
+  }
+  const token = signToken({ id: user.id, username: user.username, role: user.role as any });
+  res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+}));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -61,6 +96,7 @@ app.put('/api/departments/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/departments/:id', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
   const { id } = req.params;
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) return res.status(404).json({ message: 'Department not found.' });
@@ -104,6 +140,7 @@ app.put('/api/locations/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/locations/:id', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
   const { id } = req.params;
   const loc = await prisma.location.findUnique({ where: { id } });
   if (!loc) return res.status(404).json({ message: 'Location not found.' });
@@ -147,6 +184,7 @@ app.put('/api/funds/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/funds/:id', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
   const { id } = req.params;
   const fund = await prisma.fundCluster.findUnique({ where: { id } });
   if (!fund) return res.status(404).json({ message: 'Fund not found.' });
@@ -191,6 +229,7 @@ app.put('/api/categories/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/categories/:id', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
   const { id } = req.params;
   const cat = await prisma.assetCategory.findUnique({ where: { id } });
   if (!cat) return res.status(404).json({ message: 'Category not found.' });
@@ -252,6 +291,7 @@ app.put('/api/employees/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/employees/:id', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
   const { id } = req.params;
   const emp = await prisma.employee.findUnique({ where: { id } });
   if (!emp) return res.status(404).json({ message: 'Employee not found.' });
@@ -322,6 +362,7 @@ app.put('/api/catalog/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/catalog/:id', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
   const { id } = req.params;
   const item = await prisma.catalogItem.findUnique({ where: { id } });
   if (!item) return res.status(404).json({ message: 'Catalog item not found.' });
@@ -581,6 +622,67 @@ app.post('/api/logs', asyncHandler(async (req, res) => {
     },
   });
   res.status(201).json(log);
+}));
+
+app.get('/api/settings', asyncHandler(async (_req, res) => {
+  const settings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+  res.json(settings);
+}));
+
+app.put('/api/settings', authMiddleware, asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const { general, inventory, documents, notifications } = req.body || {};
+  const updated = await prisma.systemSettings.update({
+    where: { id: 1 },
+    data: {
+      general,
+      inventory,
+      documents,
+      notifications,
+    },
+  });
+  res.json(updated);
+}));
+
+app.get('/api/users', authMiddleware, asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const users = await prisma.user.findMany({ orderBy: { username: 'asc' } });
+  res.json(users);
+}));
+
+app.post('/api/users', authMiddleware, asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const { username, password, role = 'Staff', status = 'Active' } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ message: 'username and password are required' });
+  }
+  const existing = await prisma.user.findUnique({ where: { username } });
+  if (existing) return res.status(400).json({ message: 'Username already exists' });
+  const created = await prisma.user.create({
+    data: { username, passwordHash: password, role, status },
+  });
+  res.status(201).json(created);
+}));
+
+app.put('/api/users/:id', authMiddleware, asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const { id } = req.params;
+  const { password, role, status } = req.body || {};
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  const currentUser = (req as any).user;
+  if (status === 'Inactive' && currentUser?.id === id) {
+    return res.status(400).json({ message: 'You cannot deactivate your own account.' });
+  }
+  const updated = await prisma.user.update({
+    where: { id },
+    data: {
+      passwordHash: password ?? user.passwordHash,
+      role: role ?? user.role,
+      status: status ?? user.status,
+    },
+  });
+  res.json(updated);
 }));
 
 app.post('/api/audits', asyncHandler(async (req, res) => {

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useContext } from 'react';
 import { 
   INITIAL_INVENTORY, 
   INITIAL_DEPARTMENTS, 
@@ -16,6 +16,7 @@ import {
   INITIAL_SETTINGS,
   INITIAL_NOTIFICATIONS
 } from './constants';
+import UserManager from './UserManager';
 import { 
   bootstrapDataFromApi, 
   createAsset, 
@@ -42,7 +43,12 @@ import {
   createMemorandumReceipt,
   createAuditSession,
   updateAuditSession,
-  createActivityLog
+  createActivityLog,
+  login,
+  setAuthToken,
+  createUser,
+  updateUser,
+  updateSettingsApi
 } from './api';
 import { 
   InventoryItem, 
@@ -179,13 +185,53 @@ const exportToCSV = (data: any[], filename: string) => {
 };
 
 // --- Helper Components ---
+type ConfirmOptions = {
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  hideCancel?: boolean;
+  variant?: 'danger' | 'info';
+};
+
+const ConfirmContext = React.createContext<(opts: ConfirmOptions) => Promise<boolean>>(async () => false);
+
+const ConfirmDialog = ({ state, onResolve }: { state: { open: boolean; options?: ConfirmOptions }, onResolve: (result: boolean) => void }) => {
+  if (!state.open || !state.options) return null;
+  const { title = 'Please Confirm', message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', hideCancel, variant = 'danger' } = state.options;
+  const confirmClasses = variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#006400] hover:bg-[#004d00]';
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-slate-200 animate-in fade-in slide-in-from-bottom-4">
+        <div className="p-6 space-y-4">
+          <div className="space-y-1">
+            <div className="text-sm font-bold text-slate-800">{title}</div>
+            <div className="text-sm text-slate-600 leading-relaxed">{message}</div>
+          </div>
+          <div className="flex justify-end gap-2">
+            {!hideCancel && (
+              <button onClick={() => onResolve(false)} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button>
+            )}
+            <button onClick={() => onResolve(true)} className={`px-4 py-2 rounded-lg text-white ${confirmClasses}`}>{confirmLabel}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ESSUHeader = () => (
   <div className="hidden print:block text-center mb-8 font-serif">
-    <div className="text-xs font-bold tracking-wider">Republic of the Philippines</div>
-    <div className="text-sm font-bold text-[#006400] tracking-wide">EASTERN SAMAR STATE UNIVERSITY</div>
-    <div className="text-xs italic">Borongan City, Eastern Samar</div>
-    <div className="mt-4 pt-2 border-t border-black w-full max-w-md mx-auto"></div>
+    <div className="flex items-center justify-center gap-4 mb-3">
+      <img src="/essu-seal.png" alt="ESSU Seal" className="w-14 h-14 object-contain" />
+      <div className="text-left">
+        <div className="text-xs font-bold tracking-wider">Republic of the Philippines</div>
+        <div className="text-sm font-bold text-[#006400] tracking-wide">EASTERN SAMAR STATE UNIVERSITY</div>
+        <div className="text-xs italic">Borongan City, Eastern Samar</div>
+      </div>
+    </div>
+    <div className="mt-2 pt-2 border-t border-black w-full max-w-md mx-auto"></div>
     <div className="mt-1 font-bold text-lg uppercase tracking-widest">Supply Office</div>
   </div>
 );
@@ -515,7 +561,8 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
 };
 
 // --- Settings Module ---
-const SettingsView = ({ settings, setSettings, onLog }: any) => {
+const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, users = [], onCreateUser, onUpdateUser }: any) => {
+    const confirm = useContext(ConfirmContext);
     const handleChange = (section: string, field: string, value: any) => {
         setSettings((prev: any) => ({
             ...prev,
@@ -529,7 +576,10 @@ const SettingsView = ({ settings, setSettings, onLog }: any) => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-slate-800">System Settings</h1>
+            <div className="flex items-center justify-between gap-3">
+                <h1 className="text-2xl font-bold text-slate-800">System Settings</h1>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">Role: {userRole}</span>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* General Settings */}
@@ -615,21 +665,43 @@ const SettingsView = ({ settings, setSettings, onLog }: any) => {
                         Manage system data and backups.
                     </div>
                     <div className="flex gap-4">
-                        <button className="flex-1 px-4 py-2 border border-slate-300 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-50 text-slate-700" onClick={() => alert('Download started...')}>
+                        <button className="flex-1 px-4 py-2 border border-slate-300 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-50 text-slate-700" onClick={async () => await confirm({ title: 'Download backup', message: 'Download started (placeholder).', confirmLabel: 'OK', hideCancel: true, variant: 'info' })}>
                             <Download size={16} /> Export DB
                         </button>
-                        <button className="flex-1 px-4 py-2 border border-red-200 bg-red-50 rounded-lg flex items-center justify-center gap-2 hover:bg-red-100 text-red-600" onClick={() => alert('Reset function is disabled in prototype.')}>
+                        <button className="flex-1 px-4 py-2 border border-red-200 bg-red-50 rounded-lg flex items-center justify-center gap-2 hover:bg-red-100 text-red-600" onClick={async () => await confirm({ title: 'Reset disabled', message: 'Reset function is disabled in this prototype.', confirmLabel: 'OK', hideCancel: true, variant: 'info' })}>
                             <RefreshCw size={16} /> Reset Demo
                         </button>
                     </div>
                 </div>
+            </div>
+
+            {userRole === 'Officer' && (
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 mb-1">
+                        <Users className="text-[#006400]" />
+                        <div>
+                            <h3 className="font-bold text-slate-800">User Accounts</h3>
+                            <p className="text-sm text-slate-500">Create and manage staff accounts with login access.</p>
+                        </div>
+                    </div>
+                    <UserManager users={users} onCreateUser={onCreateUser} onUpdateUser={onUpdateUser} />
+                </div>
+            )}
+
+            <div className="flex justify-end">
+                <button
+                    onClick={() => onSaveSettings(settings)}
+                    className="px-5 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] text-sm font-semibold"
+                >
+                    Save Settings
+                </button>
             </div>
         </div>
     );
 };
 
 // --- Landing/Login Page Component ---
-const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
+const LandingPage = ({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -640,60 +712,61 @@ const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-    setTimeout(() => {
-      if (username === 'admin' && password === 'password') {
-        onLogin();
-      } else {
-        setError('Invalid username or password. Try admin / password');
-        setIsLoading(false);
-      }
-    }, 1500);
+    onLogin(username, password)
+      .catch((err: any) => {
+        setError(err?.message || 'Login failed');
+      })
+      .finally(() => setIsLoading(false));
   };
 
   return (
     <div className="min-h-screen bg-green-50/50 flex items-center justify-center font-sans">
-      <div className="w-full max-w-5xl h-[600px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-100 animate-in fade-in zoom-in duration-500 mx-4">
+      <div className="w-full max-w-5xl h-[620px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-100 animate-in fade-in zoom-in duration-500 mx-4">
         <div className="w-full md:w-1/2 bg-[#006400] text-white p-12 flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.2),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.12),transparent_30%)]"></div>
           <div className="absolute top-0 left-0 w-full h-full opacity-10">
              <div className="absolute right-0 top-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
              <div className="absolute left-0 bottom-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl transform -translate-x-1/2 translate-y-1/2"></div>
           </div>
-          <div className="relative z-10">
-            <div className="w-16 h-16 bg-white/10 rounded-xl mb-6 flex items-center justify-center backdrop-blur-sm border border-white/20 shadow-lg">
-               <ShieldCheck className="w-8 h-8 text-yellow-400" />
+          <div className="relative z-10 space-y-8">
+            <div className="flex items-start gap-4">
+              <img src="/essu-seal.png" alt="ESSU Seal" className="w-16 h-16 rounded-full bg-white/90 p-1.5 border border-white shadow-lg object-contain shrink-0" />
+              <div className="space-y-1">
+                <h1 className="text-3xl font-bold leading-tight">ESSU Inventory</h1>
+                <p className="text-green-100 text-sm opacity-90 leading-relaxed max-w-xs">Property, Plant, and Equipment (PPE) Management and Audit System</p>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold mb-2">ESSU Inventory</h1>
-            <p className="text-green-100 text-sm opacity-90 leading-relaxed">Property, Plant, and Equipment (PPE) Management and Audit System</p>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Real-time Stock Tracking</span></div>
+              <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Digital Audit Workflows</span></div>
+              <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Asset Lifecycle Management</span></div>
+            </div>
           </div>
-          <div className="relative z-10 space-y-4">
-             <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Real-time Stock Tracking</span></div>
-             <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Digital Audit Workflows</span></div>
-             <div className="flex items-center gap-3 text-sm text-green-50"><CheckCircle2 className="w-5 h-5 text-yellow-400" /><span>Asset Lifecycle Management</span></div>
-          </div>
-          <div className="relative z-10 text-xs text-green-200/60 mt-8">&copy; 2025 Eastern Samar State University</div>
+          <div className="relative z-10 text-[11px] tracking-wide text-green-200/70 mt-10">&copy; 2025 Eastern Samar State University</div>
         </div>
         <div className="w-full md:w-1/2 p-12 bg-white flex flex-col justify-center">
            <div className="max-w-sm mx-auto w-full">
-              <h2 className="text-2xl font-bold text-[#006400] mb-1">Welcome Back</h2>
-              <p className="text-slate-500 text-sm mb-8">Please enter your credentials to access the system.</p>
+              <h2 className="text-3xl font-semibold text-[#0a4d0a] mb-2">Welcome back</h2>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed">Sign in to manage assets, stock movements, and audit sessions.</p>
               {error && <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-sm text-red-600 animate-in slide-in-from-top-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
-              <form onSubmit={handleLogin} className="space-y-5">
+              <form onSubmit={handleLogin} className="space-y-4">
                  <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Username</label>
                     <div className="relative">
                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                       <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] focus:ring-1 focus:ring-[#006400] transition-all" placeholder="Enter your username" disabled={isLoading} />
+                       <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#0a4d0a] focus:ring-1 focus:ring-[#0a4d0a]/60 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]" placeholder="Enter your username" disabled={isLoading} />
                     </div>
                  </div>
                  <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Password</label>
                     <div className="relative">
                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                       <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] focus:ring-1 focus:ring-[#006400] transition-all" placeholder="••••••••" disabled={isLoading} />
-                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#006400]">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                       <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-10 py-3 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#0a4d0a] focus:ring-1 focus:ring-[#0a4d0a]/60 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]" placeholder="••••••••" disabled={isLoading} />
+                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0a4d0a]">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
                     </div>
                  </div>
-                 <button type="submit" disabled={isLoading} className="w-full bg-[#006400] hover:bg-[#004d00] text-white font-semibold py-2.5 rounded-lg shadow-lg shadow-green-900/10 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2">
+                 <button type="submit" disabled={isLoading} className="w-full bg-[#0a4d0a] hover:bg-[#083b08] text-white font-semibold py-3 rounded-lg shadow-lg shadow-green-900/10 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2 active:scale-[0.99]">
                     {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Authenticating...</span></> : <span>Sign In</span>}
                  </button>
               </form>
@@ -833,7 +906,8 @@ const ActivityLogView = ({ logs, setLogs }: any) => {
 };
 
 // --- Asset Registry Modules ---
-const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog, employees, onNavigate, onLog }: any) => {
+const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog, employees, onNavigate, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterDept, setFilterDept] = useState('All');
     const [filterLoc, setFilterLoc] = useState('All');
@@ -865,12 +939,22 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
         onNavigate('asset-edit', asset);
     };
 
-    const handleDelete = (id: string) => {
-        if(confirm('Are you sure you want to delete/archive this asset?')) {
-            const updated = assets.map((a: Asset) => a.id === id ? { ...a, status: 'Archived', updatedAt: new Date().toISOString() } : a);
-            setAssets(updated);
-            if (onLog) onLog('Archived Asset', 'Asset Registry', `Archived asset ID: ${id}`, id);
+    const handleDelete = async (id: string) => {
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can delete assets.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
         }
+        const ok = await confirm({
+            title: 'Archive asset?',
+            message: 'Are you sure you want to archive this asset?',
+            confirmLabel: 'Yes, archive',
+            cancelLabel: 'Cancel',
+            variant: 'danger'
+        });
+        if (!ok) return;
+        const updated = assets.map((a: Asset) => a.id === id ? { ...a, status: 'Archived', updatedAt: new Date().toISOString() } : a);
+        setAssets(updated);
+        if (onLog) onLog('Archived Asset', 'Asset Registry', `Archived asset ID: ${id}`, id);
     };
 
     return (
@@ -955,7 +1039,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
                                         <div className="flex justify-end gap-2">
                                             <button onClick={() => onNavigate('asset-detail', asset)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Details"><Eye size={16} /></button>
                                             <button onClick={() => handleEdit(asset)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Pencil size={16} /></button>
-                                            <button onClick={() => handleDelete(asset.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded" title="Delete"><Trash2 size={16} /></button>
+                                            {userRole === 'Officer' && <button onClick={() => handleDelete(asset.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded" title="Delete"><Trash2 size={16} /></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -2165,15 +2249,16 @@ const AuditList = ({ audits, onNavigate, departments, locations }: any) => {
 };
 
 const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [sessionId] = useState(`PC-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`);
     const [description, setDescription] = useState('');
     const [selectedLoc, setSelectedLoc] = useState('');
     const [selectedDept, setSelectedDept] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-    const handleStart = () => {
+    const handleStart = async () => {
         if (!description || (!selectedLoc && !selectedDept)) {
-            alert("Description and at least one scope (Location or Department) are required.");
+            await confirm({ title: 'Missing details', message: 'Description and at least one scope (Location or Department) are required.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
             return;
         }
 
@@ -2209,7 +2294,7 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
             description,
             items: auditItems,
             status: 'Draft',
-            createdBy: 'Jeffrey Meneses',
+            createdBy: 'System',
             createdAt: new Date().toISOString()
         };
 
@@ -2287,6 +2372,7 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
 };
 
 const AuditWorksheet = ({ audit, onBack, onSaveDraft, onFinalize }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [items, setItems] = useState<AuditItem[]>(audit.items);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -2350,7 +2436,10 @@ const AuditWorksheet = ({ audit, onBack, onSaveDraft, onFinalize }: any) => {
                 </div>
                 <div className="flex gap-2">
                      <button onClick={() => onSaveDraft({...audit, items})} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex gap-2 items-center"><Save size={16}/> Save Draft</button>
-                     <button onClick={() => { if(confirm('Finalize this audit? This cannot be undone.')) onFinalize({...audit, items}) }} className="px-4 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] flex gap-2 items-center"><Check size={16}/> Finalize</button>
+                     <button onClick={async () => { 
+                        const ok = await confirm({ title: 'Finalize audit?', message: 'Finalize this audit? This cannot be undone.', confirmLabel: 'Yes, finalize', variant: 'danger' });
+                        if (ok) onFinalize({...audit, items});
+                     }} className="px-4 py-2 bg-[#006400] text-white rounded-lg hover:bg-[#004d00] flex gap-2 items-center"><Check size={16}/> Finalize</button>
                 </div>
             </div>
 
@@ -2545,7 +2634,8 @@ const AuditReport = ({ audit, onBack }: any) => {
 };
 
 // --- Master Data Views ---
-const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any) => {
+const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
     const [formData, setFormData] = useState({ 
@@ -2586,13 +2676,18 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this employee?')) return;
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate employees.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+        const ok = await confirm({ title: 'Deactivate employee?', message: 'Are you sure you want to deactivate this employee?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        if (!ok) return;
         try {
             const updatedEmp = await deactivateEmployee(id);
             setEmployees(employees.map((e: Employee) => e.id === id ? updatedEmp : e));
             if (onLog) onLog('Deactivated Employee', 'Master Data', `Deactivated employee ID: ${id}`, id);
         } catch (err: any) {
-            alert(err?.message || 'Failed to deactivate employee.');
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate employee.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -2692,7 +2787,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any
                                 <td className="px-6 py-3 text-right">
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => handleEdit(e)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                        <button onClick={() => handleDelete(e.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                        {userRole === 'Officer' && <button onClick={() => handleDelete(e.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
                                     </div>
                                 </td>
                             </tr>
@@ -2804,7 +2899,8 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog }: any
     );
 };
 
-const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }: any) => {
+const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingDept, setEditingDept] = useState<Department | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', head: '', locationId: '', status: 'Active' });
@@ -2834,13 +2930,18 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }:
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this department?')) return;
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate departments.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+        const ok = await confirm({ title: 'Deactivate department?', message: 'Are you sure you want to deactivate this department?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        if (!ok) return;
         try {
             const updatedDept = await deactivateDepartment(id);
             setDepartments(departments.map((d: Department) => d.id === id ? updatedDept : d));
             if (onLog) onLog('Deactivated Department', 'Master Data', `Deactivated department ID: ${id}`, id);
         } catch (err: any) {
-            alert(err?.message || 'Failed to deactivate department.');
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate department.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -2935,7 +3036,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }:
                                 <td className="px-6 py-3 text-right">
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => handleEdit(d)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                        <button onClick={() => handleDelete(d.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                        {userRole === 'Officer' && <button onClick={() => handleDelete(d.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
                                     </div>
                                 </td>
                             </tr>
@@ -3027,7 +3128,8 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog }:
     );
 };
 
-const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
+const LocationMasterView = ({ locations, setLocations, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingLoc, setEditingLoc] = useState<Location | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', description: '', status: 'Active' });
@@ -3056,13 +3158,18 @@ const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this location?')) return;
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate locations.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+        const ok = await confirm({ title: 'Deactivate location?', message: 'Are you sure you want to deactivate this location?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        if (!ok) return;
         try {
             const updatedLoc = await deactivateLocation(id);
             setLocations(locations.map((l: Location) => l.id === id ? updatedLoc : l));
             if (onLog) onLog('Deactivated Location', 'Master Data', `Deactivated location ID: ${id}`, id);
         } catch (err: any) {
-            alert(err?.message || 'Failed to deactivate location.');
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate location.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -3155,7 +3262,7 @@ const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
                             <td className="px-6 py-3 text-right">
                                 <div className="flex justify-end gap-2">
                                     <button onClick={() => handleEdit(l)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                    <button onClick={() => handleDelete(l.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                    {userRole === 'Officer' && <button onClick={() => handleDelete(l.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
                                 </div>
                             </td>
                         </tr>
@@ -3233,7 +3340,8 @@ const LocationMasterView = ({ locations, setLocations, onLog }: any) => {
     );
 };
 
-const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
+const FundClusterMasterView = ({ funds, setFunds, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingFund, setEditingFund] = useState<FundCluster | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', description: '', status: 'Active' });
@@ -3262,13 +3370,18 @@ const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this fund cluster?')) return;
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate fund clusters.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+        const ok = await confirm({ title: 'Deactivate fund cluster?', message: 'Are you sure you want to deactivate this fund cluster?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        if (!ok) return;
         try {
             const updatedFund = await deactivateFund(id);
             setFunds(funds.map((f: FundCluster) => f.id === id ? updatedFund : f));
             if (onLog) onLog('Deactivated Fund Cluster', 'Master Data', `Deactivated fund cluster ID: ${id}`, id);
         } catch (err: any) {
-            alert(err?.message || 'Failed to deactivate fund cluster.');
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate fund cluster.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -3359,7 +3472,7 @@ const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
                                 <td className="px-6 py-3 text-right">
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                        <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                        {userRole === 'Officer' && <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
                                     </div>
                                 </td>
                             </tr>
@@ -3437,13 +3550,15 @@ const FundClusterMasterView = ({ funds, setFunds, onLog }: any) => {
     );
 };
 
-const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
+const CategoryMasterView = ({ categories, setCategories, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<AssetCategory | null>(null);
     const [formData, setFormData] = useState({ code: '', name: '', description: '', type: 'PPE', status: 'Active' });
     const [searchTerm, setSearchTerm] = useState('');
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleEdit = (cat: AssetCategory) => {
         setEditingCategory(cat);
@@ -3466,13 +3581,18 @@ const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this category?')) return;
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate categories.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+        const ok = await confirm({ title: 'Deactivate category?', message: 'Are you sure you want to deactivate this category?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        if (!ok) return;
         try {
             const updatedCat = await deactivateCategory(id);
             setCategories(categories.map((c: AssetCategory) => c.id === id ? updatedCat : c));
             if (onLog) onLog('Deactivated Category', 'Master Data', `Deactivated category ID: ${id}`, id);
         } catch (err: any) {
-            alert(err?.message || 'Failed to deactivate category.');
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate category.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -3565,7 +3685,7 @@ const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
                                 <td className="px-6 py-3 text-right">
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                        {userRole === 'Officer' && <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
                                     </div>
                                 </td>
                             </tr>
@@ -3655,7 +3775,8 @@ const CategoryMasterView = ({ categories, setCategories, onLog }: any) => {
     );
 };
 
-const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
+const PPECatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
     const [formData, setFormData] = useState<any>({ 
@@ -3698,13 +3819,18 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this item?')) return;
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate items.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+        const ok = await confirm({ title: 'Deactivate item?', message: 'Are you sure you want to deactivate this item?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        if (!ok) return;
         try {
             const updated = await deactivateCatalogItem(id);
             setCatalog(catalog.map((c: CatalogItem) => c.id === id ? updated : c));
             if (onLog) onLog('Deactivated PPE Item', 'Master Data', `Deactivated item ID: ${id}`, id);
         } catch (err: any) {
-            alert(err?.message || 'Failed to deactivate item.');
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate item.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -3809,7 +3935,7 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
                                 <td className="px-6 py-3 text-right">
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                        {userRole === 'Officer' && <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
                                     </div>
                                 </td>
                             </tr>
@@ -3904,7 +4030,8 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
     );
 };
 
-const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any) => {
+const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: any) => {
+    const confirm = useContext(ConfirmContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
     const [formData, setFormData] = useState<any>({ 
@@ -3950,13 +4077,18 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this item?')) return;
+        if (userRole !== 'Officer') {
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate items.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+        const ok = await confirm({ title: 'Deactivate item?', message: 'Are you sure you want to deactivate this item?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        if (!ok) return;
         try {
             const updated = await deactivateCatalogItem(id);
             setCatalog(catalog.map((c: CatalogItem) => c.id === id ? updated : c));
             if (onLog) onLog('Deactivated Consumable', 'Master Data', `Deactivated item ID: ${id}`, id);
         } catch (err: any) {
-            alert(err?.message || 'Failed to deactivate item.');
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate item.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -4074,7 +4206,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
                                 <td className="px-6 py-3 text-right">
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                        {userRole === 'Officer' && <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
                                     </div>
                                 </td>
                             </tr>
@@ -4180,9 +4312,20 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog }: any)
 };
 
 const App = () => {
+  const [auth, setAuth] = useState<{ token: string, user: { id: string, username: string, role: string } } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [view, setView] = useState<ViewState>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [confirmState, setConfirmState] = useState<{ open: boolean; options?: ConfirmOptions }>({ open: false });
+  const confirmResolveRef = useRef<(result: boolean) => void>();
+  const requestConfirm = (options: ConfirmOptions) => new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+      setConfirmState({ open: true, options });
+  });
+  const handleConfirmResolve = (result: boolean) => {
+      setConfirmState({ open: false, options: undefined });
+      confirmResolveRef.current?.(result);
+  };
 
   // Data State Initialization
   const [inventory, setInventory] = useState(INITIAL_INVENTORY);
@@ -4198,20 +4341,38 @@ const App = () => {
   const [audits, setAudits] = useState<AuditSession[]>([]);
   const [logs, setLogs] = useState(INITIAL_LOGS);
   const [settings, setSettings] = useState(INITIAL_SETTINGS);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [lastSavedSettings, setLastSavedSettings] = useState(INITIAL_SETTINGS);
+  const [users, setUsers] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS as AppNotification[]);
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedMR, setSelectedMR] = useState<MemorandumReceipt | null>(null);
   const [isSavingMR, setIsSavingMR] = useState(false);
   const [isSavingAudit, setIsSavingAudit] = useState(false);
+  const userRole = auth?.user.role || 'Officer';
+  const [showNotifications, setShowNotifications] = useState(false);
   
   useEffect(() => {
+    const saved = localStorage.getItem('auth');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setAuth(parsed);
+      setIsAuthenticated(true);
+      setAuthToken(parsed.token);
+    }
+  }, []);
+
+  useEffect(() => {
     const load = async () => {
+      if (!isAuthenticated) {
+        setIsBootstrapping(false);
+        return;
+      }
       setIsBootstrapping(true);
       try {
-        const data = await bootstrapDataFromApi();
+        const data = await bootstrapDataFromApi(userRole);
         setDepartments(data.departments);
         setEmployees(data.employees);
         setLocations(data.locations);
@@ -4223,6 +4384,9 @@ const App = () => {
         setMrs(data.mrs);
         setAudits(data.audits);
         setLogs(data.logs);
+        setSettings(data.settings || settings);
+        setLastSavedSettings(data.settings || settings);
+        setUsers(data.users || []);
         setDataError(null);
       } catch (err) {
         console.error('API bootstrap failed, falling back to mock data.', err);
@@ -4238,12 +4402,46 @@ const App = () => {
         setMrs(INITIAL_MRS);
         setAudits(INITIAL_AUDITS);
         setLogs(INITIAL_LOGS);
+        setSettings(INITIAL_SETTINGS);
       } finally {
         setIsBootstrapping(false);
       }
     };
     load();
-  }, []);
+  }, [isAuthenticated]);
+
+  // Derive notifications (low stock + recent activity)
+  useEffect(() => {
+    const lowStockAlerts: AppNotification[] = settings.notifications?.enableLowStockAlerts
+      ? catalog
+          .filter((c: CatalogItem) => c.itemType === 'Consumable' && (c.reorderPoint || 0) >= (c.quantity || 0))
+          .map((c: CatalogItem) => ({
+            id: `low-${c.id}`,
+            title: 'Low Stock Alert',
+            message: `${c.article} is at ${c.quantity ?? 0} (threshold ${c.reorderPoint || 0}).`,
+            type: 'warning' as const,
+            timestamp: new Date().toISOString(),
+            read: false,
+            link: 'mdm-consumables' as ViewState,
+          }))
+      : [];
+
+    const recentLogs: AppNotification[] = (logs || []).slice(0, 5).map((l: LogEntry) => ({
+      id: `log-${l.id}`,
+      title: l.action,
+      message: l.description,
+      type: 'info',
+      timestamp: l.timestamp,
+      read: false,
+      link: 'activity-logs' as ViewState,
+    }));
+
+    const merged: AppNotification[] = [...lowStockAlerts, ...recentLogs].map((n) => {
+      const existing = notifications.find((x) => x.id === n.id);
+      return existing ? { ...n, read: existing.read } : n;
+    });
+    setNotifications(merged);
+  }, [catalog, logs, settings.notifications]);
   
   // Asset Editing State
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
@@ -4258,9 +4456,9 @@ const App = () => {
       const newLog: LogEntry = {
           id: generateId(),
           timestamp: new Date().toISOString(),
-          userId: 'E001',
-          username: 'Jeffrey Meneses',
-          role: 'Admin Officer V',
+          userId: auth?.user.id || 'E001',
+          username: auth?.user.username || 'User',
+          role: auth?.user.role || 'Officer',
           action,
           module,
           description,
@@ -4308,7 +4506,7 @@ const App = () => {
   const handleTransactionSave = async (data: any) => {
       setIsSavingTransaction(true);
       try {
-          const created = await createTransaction({ ...data, status: 'Completed', createdBy: 'Jeffrey Meneses' });
+          const created = await createTransaction({ ...data, status: 'Completed', createdBy: auth?.user.username || 'User' });
           setTransactions([created, ...transactions]);
           // Refresh catalog quantities from backend or adjust locally based on created.items
           if (created.items?.length) {
@@ -4346,17 +4544,40 @@ const App = () => {
       }
   };
 
+  const handleAuthSignOut = () => {
+      setAuth(null);
+      setIsAuthenticated(false);
+      setAuthToken(null);
+      localStorage.removeItem('auth');
+  };
+
+  const handleAuthLogin = async (username: string, password: string) => {
+      const result = await login(username, password);
+      setAuth(result);
+      setIsAuthenticated(true);
+      setAuthToken(result.token);
+      localStorage.setItem('auth', JSON.stringify(result));
+  };
+
   if (!isAuthenticated) {
-      return <LandingPage onLogin={() => setIsAuthenticated(true)} />;
+      return (
+        <ConfirmContext.Provider value={requestConfirm}>
+          <LandingPage onLogin={handleAuthLogin} />
+          <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+        </ConfirmContext.Provider>
+      );
   }
 
   if (isAuthenticated && isBootstrapping) {
       return (
-        <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-600">
-            <div className="flex items-center gap-3 text-sm font-medium">
-                <Loader2 className="animate-spin" /> Loading data from server...
-            </div>
-        </div>
+        <ConfirmContext.Provider value={requestConfirm}>
+          <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-600">
+              <div className="flex items-center gap-3 text-sm font-medium">
+                  <Loader2 className="animate-spin" /> Loading data from server...
+              </div>
+          </div>
+          <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+        </ConfirmContext.Provider>
       );
   }
 
@@ -4364,7 +4585,11 @@ const App = () => {
       switch (view) {
           case 'dashboard':
               return (
-                <div className="space-y-6">
+                <div className="relative">
+                    <div className="pointer-events-none absolute inset-0 opacity-5 flex justify-end items-start pr-6 pt-6">
+                        <img src="/essu-seal.png" alt="ESSU Seal" className="w-48 md:w-60 select-none" />
+                    </div>
+                    <div className="space-y-6 relative">
                     <div className="flex justify-between items-center">
                         <div>
                             <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
@@ -4430,11 +4655,44 @@ const App = () => {
                             <button onClick={() => setView('activity-logs')} className="mt-4 text-sm text-[#006400] font-medium hover:underline text-center w-full">View All Activity</button>
                         </div>
                     </div>
+                    </div>
                 </div>
               );
           case 'activity-logs': return <ActivityLogView logs={logs} setLogs={setLogs} />;
           case 'reports': return <ReportsModule assets={assets} catalog={catalog} transactions={transactions} audits={audits} departments={departments} locations={locations} categories={categories} />;
-          case 'settings': return <SettingsView settings={settings} setSettings={setSettings} onLog={handleLog} />;
+          case 'settings': 
+              return <SettingsView 
+                  settings={settings} 
+                  setSettings={setSettings} 
+                  userRole={userRole}
+                  users={users}
+                  onSaveSettings={async (s: any) => {
+                      try {
+                          const changed = JSON.stringify(s) !== JSON.stringify(lastSavedSettings);
+                          if (!changed) {
+                              setDataError('No changes to save.');
+                              return;
+                          }
+                          const saved = await updateSettingsApi(s);
+                          setLastSavedSettings(saved);
+                          handleLog('Updated Settings', 'Settings', 'Updated system settings');
+                          setDataError(null);
+                      } catch (err: any) {
+                          setDataError(err?.message || 'Failed to save settings.');
+                      }
+                  }} 
+                  onCreateUser={async (payload: any) => {
+                      const created = await createUser(payload);
+                      setUsers([...users, created]);
+                      handleLog('Created User', 'Settings', `Created user ${created.username}`, created.id);
+                  }}
+                  onUpdateUser={async (id: string, payload: any) => {
+                      const updated = await updateUser(id, payload);
+                      setUsers(users.map(u => u.id === id ? updated : u));
+                      handleLog('Updated User', 'Settings', `Updated user ${updated.username}`, updated.id);
+                  }}
+                  onLog={handleLog} 
+              />;
           
           case 'asset-registry': 
               return <AssetRegistryList 
@@ -4444,6 +4702,7 @@ const App = () => {
                   locations={locations}
                   catalog={catalog}
                   employees={employees}
+                  userRole={userRole}
                   onNavigate={(view: ViewState, asset?: Asset) => {
                       if (view === 'asset-edit' && asset) {
                           setEditingAsset(asset);
@@ -4572,19 +4831,20 @@ const App = () => {
                   return <AuditReport audit={activeAudit} onBack={() => setView('audit-list')} />;
               }
 
-          case 'mdm-employees': return <EmployeeMasterView employees={employees} setEmployees={setEmployees} departments={departments} onLog={handleLog} />;
-          case 'mdm-departments': return <DepartmentMasterView departments={departments} setDepartments={setDepartments} locations={locations} onLog={handleLog} />;
-          case 'mdm-locations': return <LocationMasterView locations={locations} setLocations={setLocations} onLog={handleLog} />;
-          case 'mdm-funds': return <FundClusterMasterView funds={funds} setFunds={setFunds} onLog={handleLog} />;
-          case 'mdm-categories': return <CategoryMasterView categories={categories} setCategories={setCategories} onLog={handleLog} />;
-          case 'mdm-ppe': return <PPECatalogView catalog={catalog} setCatalog={setCatalog} categories={categories} onLog={handleLog} />;
-          case 'mdm-consumables': return <ConsumablesCatalogView catalog={catalog} setCatalog={setCatalog} categories={categories} onLog={handleLog} />;
+          case 'mdm-employees': return <EmployeeMasterView employees={employees} setEmployees={setEmployees} departments={departments} onLog={handleLog} userRole={userRole} />;
+          case 'mdm-departments': return <DepartmentMasterView departments={departments} setDepartments={setDepartments} locations={locations} onLog={handleLog} userRole={userRole} />;
+          case 'mdm-locations': return <LocationMasterView locations={locations} setLocations={setLocations} onLog={handleLog} userRole={userRole} />;
+          case 'mdm-funds': return <FundClusterMasterView funds={funds} setFunds={setFunds} onLog={handleLog} userRole={userRole} />;
+          case 'mdm-categories': return <CategoryMasterView categories={categories} setCategories={setCategories} onLog={handleLog} userRole={userRole} />;
+          case 'mdm-ppe': return <PPECatalogView catalog={catalog} setCatalog={setCatalog} categories={categories} onLog={handleLog} userRole={userRole} />;
+          case 'mdm-consumables': return <ConsumablesCatalogView catalog={catalog} setCatalog={setCatalog} categories={categories} onLog={handleLog} userRole={userRole} />;
 
           default: return <div className="p-8 text-center text-slate-500">Page not found or under construction.</div>;
       }
   };
 
   return (
+    <ConfirmContext.Provider value={requestConfirm}>
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden print:bg-white print:h-auto print:block">
         <aside className={`bg-[#006400] text-white flex flex-col transition-all duration-300 print:hidden ${isSidebarCollapsed ? 'w-16' : 'w-64'} shadow-2xl z-20`}>
              <div className="p-4 flex items-center justify-between border-b border-green-800/30 h-16 shrink-0">
@@ -4625,11 +4885,13 @@ const App = () => {
             </div>
 
             <div className="p-4 border-t border-green-800/30 shrink-0 space-y-2">
-                <button onClick={() => setView('settings')} className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''} ${view === 'settings' ? 'bg-white/10 text-yellow-400' : ''}`}>
-                    <Settings size={20} />
-                    {!isSidebarCollapsed && <span>Settings</span>}
-                </button>
-                <button onClick={() => setIsAuthenticated(false)} className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+                {auth?.user.role === 'Officer' && (
+                    <button onClick={() => setView('settings')} className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''} ${view === 'settings' ? 'bg-white/10 text-yellow-400' : ''}`}>
+                        <Settings size={20} />
+                        {!isSidebarCollapsed && <span>Settings</span>}
+                    </button>
+                )}
+                <button onClick={handleAuthSignOut} className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}>
                     <LogOut size={20} />
                     {!isSidebarCollapsed && <span>Sign Out</span>}
                 </button>
@@ -4639,20 +4901,66 @@ const App = () => {
         <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
              <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10 print:hidden">
                 <div className="flex items-center gap-4">
-                     <h2 className="text-lg font-bold text-slate-700 hidden md:block">Supply Office Management System</h2>
+                    <img src="/essu-seal.png" alt="ESSU Seal" className="w-10 h-10 rounded-full border border-slate-200 shadow-sm object-cover bg-white" />
+                    <h2 className="text-lg font-bold text-slate-700 hidden md:block">Supply Office Management System</h2>
                 </div>
-                <div className="flex items-center gap-4">
-                    <button className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
+                <div className="flex items-center gap-4 relative">
+                    <button onClick={() => setShowNotifications((v) => !v)} className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
                         <Bell size={20} />
-                        <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                        {notifications.some(n => !n.read) && (
+                          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white leading-none">
+                            {notifications.filter(n => !n.read).length}
+                          </span>
+                        )}
                     </button>
+                    {showNotifications && (
+                      <div className="absolute right-0 top-12 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-20">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                          <div>
+                            <div className="text-sm font-semibold text-slate-800">Notifications</div>
+                            <div className="text-xs text-slate-500">{notifications.filter(n => !n.read).length} unread</div>
+                          </div>
+                          <button onClick={() => setNotifications(notifications.map(n => ({...n, read: true})))} className="text-xs text-[#006400] hover:underline">Mark all read</button>
+                        </div>
+                        <div className="max-h-72 overflow-auto divide-y divide-slate-100">
+                          {notifications.length === 0 && (
+                            <div className="px-4 py-6 text-sm text-slate-500 text-center">No notifications yet.</div>
+                          )}
+                          {notifications.map((n) => (
+                            <button
+                              key={n.id}
+                              onClick={() => {
+                                setNotifications(notifications.map(x => x.id === n.id ? { ...x, read: true } : x));
+                                if (n.link) setView(n.link);
+                                setShowNotifications(false);
+                              }}
+                              className={`w-full text-left px-4 py-3 flex gap-3 hover:bg-slate-50 ${!n.read ? 'bg-amber-50/60' : ''}`}
+                            >
+                              <div className="mt-0.5">
+                                <span className={`w-2 h-2 rounded-full inline-block ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'error' ? 'bg-red-500' : 'bg-[#006400]'}`}></span>
+                              </div>
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-slate-800">{n.title}</div>
+                                <div className="text-xs text-slate-600 line-clamp-2">{n.message}</div>
+                                <div className="text-[11px] text-slate-400 mt-1">{formatDateTime(n.timestamp)}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="px-4 py-2 border-t border-slate-100 text-right">
+                          <button onClick={() => { setView('activity-logs'); setShowNotifications(false); }} className="text-xs text-[#006400] hover:underline">View activity logs</button>
+                        </div>
+                      </div>
+                    )}
                     <div className="h-8 w-px bg-slate-200 mx-1"></div>
                     <div className="flex items-center gap-3">
                         <div className="text-right hidden md:block">
-                            <div className="text-sm font-bold text-slate-800">Jeffrey Meneses</div>
-                            <div className="text-xs text-slate-500">Admin Officer V</div>
+                            <div className="text-sm font-bold text-slate-800">{auth?.user.username || 'User'}</div>
+                            <div className="text-xs text-slate-500">{auth?.user.role || 'Officer'}</div>
                         </div>
-                        <div className="w-10 h-10 bg-[#006400] text-white rounded-full flex items-center justify-center font-bold shadow-lg shadow-green-900/20">JM</div>
+                        <div className="w-10 h-10 bg-[#006400] text-white rounded-full flex items-center justify-center font-bold shadow-lg shadow-green-900/20">
+                            {(auth?.user.username || 'U').slice(0,2).toUpperCase()}
+                        </div>
                     </div>
                 </div>
             </header>
@@ -4672,6 +4980,8 @@ const App = () => {
             </div>
         </main>
     </div>
+    <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
+    </ConfirmContext.Provider>
   );
 }
 
