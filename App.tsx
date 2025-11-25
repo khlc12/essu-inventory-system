@@ -2270,6 +2270,11 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
             return matchLoc && matchDept;
         });
 
+        if (!relevantAssets.length) {
+            await confirm({ title: 'No assets in scope', message: 'No active assets match the selected location/department. Please adjust your filters.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
+
         // Create Audit Items Snapshot
         const auditItems: AuditItem[] = relevantAssets.map((a: Asset) => ({
             assetId: a.id,
@@ -2337,7 +2342,7 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Location Scope (Optional)</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Location Scope</label>
                         <select 
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
                             value={selectedLoc}
@@ -2348,7 +2353,7 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Department Scope (Optional)</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Department Scope</label>
                         <select 
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
                             value={selectedDept}
@@ -2415,10 +2420,10 @@ const AuditWorksheet = ({ audit, onBack, onSaveDraft, onFinalize }: any) => {
         total: items.length,
         counted: items.filter(i => i.actualQty !== null).length,
         shortages: items.filter(i => i.status === 'Shortage').length,
-        value: items.reduce((sum, i) => sum + (i.status === 'Shortage' ? Math.abs(i.shortageOverageValue) : 0), 0)
+        value: items.reduce((sum, i) => sum + (i.status === 'Shortage' ? Math.abs(i.shortageOverageValue || 0) : 0), 0)
     };
 
-    const progress = Math.round((stats.counted / stats.total) * 100) || 0;
+    const progress = stats.total > 0 ? Math.round((stats.counted / stats.total) * 100) : 0;
 
     return (
         <div className="space-y-6">
@@ -4326,6 +4331,13 @@ const App = () => {
       setConfirmState({ open: false, options: undefined });
       confirmResolveRef.current?.(result);
   };
+  const handleAuthError = () => {
+      setAuth(null);
+      setIsAuthenticated(false);
+      setAuthToken(null);
+      localStorage.removeItem('auth');
+      setDataError('Session expired. Please sign in again.');
+  };
 
   // Data State Initialization
   const [inventory, setInventory] = useState(INITIAL_INVENTORY);
@@ -4366,7 +4378,7 @@ const App = () => {
 
   useEffect(() => {
     const load = async () => {
-      if (!isAuthenticated) {
+      if (!isAuthenticated || !auth?.token) {
         setIsBootstrapping(false);
         return;
       }
@@ -4389,6 +4401,10 @@ const App = () => {
         setUsers(data.users || []);
         setDataError(null);
       } catch (err) {
+        if ((err as any)?.status === 401) {
+          handleAuthError();
+          return;
+        }
         console.error('API bootstrap failed, falling back to mock data.', err);
         setDataError('Failed to load data from the backend. Using local mock data instead.');
         setDepartments(INITIAL_DEPARTMENTS);
@@ -4408,7 +4424,7 @@ const App = () => {
       }
     };
     load();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, auth?.token, userRole]);
 
   // Derive notifications (low stock + recent activity)
   useEffect(() => {
@@ -4496,6 +4512,10 @@ const App = () => {
           setView('asset-registry');
       } catch (err: any) {
           console.error('Failed to save asset', err);
+          if (err?.status === 401) {
+              handleAuthError();
+              return;
+          }
           setDataError(typeof err?.message === 'string' ? err.message : 'Failed to save asset.');
           throw err;
       } finally {

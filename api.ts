@@ -27,7 +27,17 @@ const authHeaders = () => (authToken ? { Authorization: `Bearer ${authToken}` } 
 const fetchJson = async <T>(path: string): Promise<T> => {
   const res = await fetch(`${API_BASE_URL}${path}`, { headers: { ...authHeaders() } });
   if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+    let message = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const json = await res.json();
+      if (json?.message) message = json.message;
+    } catch {
+      const text = await res.text();
+      if (text) message = text;
+    }
+    const error: any = new Error(message);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 };
@@ -300,8 +310,17 @@ export const createAsset = async (payload: Partial<Asset>) => {
     }),
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || 'Failed to create asset');
+    let message = 'Failed to create asset';
+    try {
+      const json = await res.json();
+      if (json?.message) message = json.message;
+    } catch {
+      const text = await res.text();
+      if (text) message = text;
+    }
+    const err: any = new Error(message);
+    err.status = res.status;
+    throw err;
   }
   const json = await res.json();
   return normalizeAsset(json);
@@ -318,8 +337,17 @@ export const updateAsset = async (id: string, payload: Partial<Asset>) => {
     }),
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || 'Failed to update asset');
+    let message = 'Failed to update asset';
+    try {
+      const json = await res.json();
+      if (json?.message) message = json.message;
+    } catch {
+      const text = await res.text();
+      if (text) message = text;
+    }
+    const err: any = new Error(message);
+    err.status = res.status;
+    throw err;
   }
   const json = await res.json();
   return normalizeAsset(json);
