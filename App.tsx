@@ -2553,85 +2553,107 @@ const AuditWorksheet = ({ audit, onBack, onSaveDraft, onFinalize }: any) => {
     );
 };
 
-const AuditReport = ({ audit, onBack }: any) => {
-    const stats = {
-        total: audit.items.length,
-        shortageCount: audit.items.filter((i: AuditItem) => i.status === 'Shortage').length,
-        shortageValue: audit.items.reduce((sum: number, i: AuditItem) => sum + (i.status === 'Shortage' ? Math.abs(i.shortageOverageValue) : 0), 0)
-    };
+const AuditReport = ({ audit, assets, funds = [], employees = [] }: any) => {
+    const findAsset = (assetId: string) => assets?.find((a: Asset) => a.id === assetId);
+    const firstFundAsset = assets?.find((a: Asset) => a.fundClusterId);
+    const fundName = firstFundAsset ? (funds.find((f: FundCluster) => f.id === firstFundAsset.fundClusterId)?.name || '') : '';
+    const rows = audit.items || [];
+    const totalValue = rows.reduce((sum: number, i: AuditItem) => sum + (i.unitValue || 0), 0);
 
     return (
         <div className="space-y-6">
-            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400] print:hidden"><ChevronLeft size={16}/> Back to Sessions</button>
             <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm print:shadow-none print:border-none">
-                <ESSUHeader />
-                <div className="text-center mb-8">
-                    <h1 className="text-xl font-bold uppercase tracking-wide">Report on the Physical Count of Property, Plant and Equipment</h1>
-                    <div className="text-sm mt-2 font-medium text-slate-600">{audit.description}</div>
-                    <div className="text-sm text-slate-500">As of {formatDate(audit.date)}</div>
+                <div className="text-center mb-6">
+                    <div className="text-xs uppercase tracking-[0.2em] font-semibold">REPORT ON THE PHYSICAL COUNT OF PROPERTY, PLANT AND EQUIPMENT</div>
+                    <div className="mt-2 font-bold text-sm uppercase">OFFICE EQUIPMENT</div>
+                    <div className="text-xs text-slate-600 italic">(Type of Property, Plant and Equipment)</div>
+                    <div className="mt-2 text-xs">As at <span className="font-bold underline">{formatDate(audit.date) || '-'}</span></div>
                 </div>
 
-                <div className="mb-6 flex justify-between text-sm border p-4 rounded bg-slate-50 print:bg-transparent print:border-none print:p-0">
-                     <div>
-                        <div className="text-slate-500">Session ID</div>
-                        <div className="font-bold">{audit.sessionId}</div>
-                     </div>
-                     <div className="text-right">
-                        <div className="text-slate-500">Total Shortage Value</div>
-                        <div className="font-bold text-red-600 text-lg">{formatCurrency(stats.shortageValue)}</div>
-                     </div>
+                <div className="text-xs grid grid-cols-1 gap-2 mb-4">
+                    <div><span className="font-semibold">Fund Cluster:</span> <span className="underline min-w-[200px] inline-block">{fundName || '______________________________'}</span></div>
+                    <div className="grid grid-cols-[90px,1fr,1fr,1fr,1fr] gap-3 items-start">
+                        <span className="font-semibold leading-5">For which</span>
+                        <div className="flex flex-col gap-1">
+                            <span className="underline min-w-[140px] block">______________________________</span>
+                            <span className="text-[10px] italic">Name of Accountable Officer</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="underline min-w-[140px] block">______________________________</span>
+                            <span className="text-[10px] italic">Official Designation</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="underline min-w-[140px] block">______________________________</span>
+                            <span className="text-[10px] italic">Entity Name</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <div className="flex flex-col">
+                                <span className="leading-4">is accountable, having assumed such accountability on</span>
+                                <span className="underline min-w-[120px] block mt-1">________________</span>
+                            </div>
+                            <span className="text-[10px] italic">Date of Assumption</span>
+                        </div>
+                    </div>
                 </div>
 
-                <table className="w-full text-sm text-left border-collapse border border-slate-300 mb-8">
-                    <thead className="bg-slate-100 text-slate-800 font-semibold print:bg-transparent">
+                <table className="w-full text-xs border border-slate-400 border-collapse">
+                    <thead className="bg-slate-100">
                         <tr>
-                            <th className="px-3 py-2 border border-slate-300">Property No</th>
-                            <th className="px-3 py-2 border border-slate-300">Description</th>
-                            <th className="px-3 py-2 border border-slate-300 text-center">System Qty</th>
-                            <th className="px-3 py-2 border border-slate-300 text-center">Actual Count</th>
-                            <th className="px-3 py-2 border border-slate-300 text-center">Overage/Shortage</th>
-                            <th className="px-3 py-2 border border-slate-300 text-right">Value</th>
-                            <th className="px-3 py-2 border border-slate-300">Remarks</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[10%]">ARTICLE</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[18%]">DESCRIPTION</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[12%]">PROPERTY NUMBER</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[6%]">Unit of Measure</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[7%]">VALUE UNIT</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[6%]">QTY. per P Card</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[6%]">QTY. per P Count</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[6%]">Shortage/Overage Qty.</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[8%]">Shortage/Overage Value</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[9%]">Receipted by</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[7%]">Location/Dept.</th>
+                            <th className="border border-slate-400 px-2 py-2 w-[7%]">Date Acquired</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {audit.items.map((item: AuditItem) => (
-                            <tr key={item.assetId}>
-                                <td className="px-3 py-2 border border-slate-300">{item.propertyNumber}</td>
-                                <td className="px-3 py-2 border border-slate-300 max-w-xs truncate">{item.description}</td>
-                                <td className="px-3 py-2 border border-slate-300 text-center">{item.systemQty}</td>
-                                <td className="px-3 py-2 border border-slate-300 text-center">{item.actualQty}</td>
-                                <td className={`px-3 py-2 border border-slate-300 text-center font-bold ${item.shortageOverageQty < 0 ? 'text-red-600' : ''}`}>
-                                    {item.shortageOverageQty}
-                                </td>
-                                <td className="px-3 py-2 border border-slate-300 text-right">
-                                    {item.shortageOverageValue !== 0 ? formatCurrency(Math.abs(item.shortageOverageValue)) : '-'}
-                                </td>
-                                <td className="px-3 py-2 border border-slate-300">{item.remarks}</td>
+                        {rows.map((item: AuditItem) => {
+                            const asset = findAsset(item.assetId);
+                            const article = asset?.description || item.description || '-';
+                            const descr = item.description || asset?.remarks || '-';
+                            const unit = 'unit';
+                            const custodian = item.custodianName || (() => {
+                                const emp = employees.find((e: Employee) => e.id === asset?.custodianId);
+                                return emp ? getEmployeeFullName(emp) : '-';
+                            })();
+                            return (
+                                <tr key={item.assetId}>
+                                    <td className="border border-slate-400 px-2 py-1 align-top">{article}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top">{descr}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top">{item.propertyNumber || asset?.propertyNumber || '-'}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top text-center">{unit}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top text-right">{item.unitValue ? formatCurrency(item.unitValue) : '-'}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top text-center">{item.systemQty ?? '-'}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top text-center">{item.actualQty ?? '-'}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top text-center">{item.shortageOverageQty ?? 0}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top text-right">{item.shortageOverageValue ? formatCurrency(item.shortageOverageValue) : '-'}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top">{custodian}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top">{item.locationName || '-'}</td>
+                                    <td className="border border-slate-400 px-2 py-1 align-top text-center">{asset?.dateAcquired ? formatDate(asset.dateAcquired) : '-'}</td>
+                                </tr>
+                            );
+                        })}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td className="border border-slate-400 px-2 py-3 text-center text-slate-500" colSpan={12}>No items.</td>
                             </tr>
-                        ))}
+                        )}
+                        <tr className="font-semibold bg-slate-50">
+                            <td className="border border-slate-400 px-2 py-2" colSpan={4}>TOTAL</td>
+                            <td className="border border-slate-400 px-2 py-2 text-right">{formatCurrency(totalValue)}</td>
+                            <td className="border border-slate-400 px-2 py-2 text-center" colSpan={7}></td>
+                        </tr>
                     </tbody>
                 </table>
 
-                <div className="grid grid-cols-3 gap-8 mt-12 pt-12 print:block print:grid-cols-3">
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
-                         <div className="text-xs font-bold uppercase">Certified Correct By:</div>
-                         <div className="text-[10px] mt-1">Inventory Committee</div>
-                     </div>
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
-                         <div className="text-xs font-bold uppercase">Approved By:</div>
-                         <div className="text-[10px] mt-1">Head of Agency</div>
-                     </div>
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
-                         <div className="text-xs font-bold uppercase">Verified By:</div>
-                         <div className="text-[10px] mt-1">COA Representative</div>
-                     </div>
-                </div>
-
-                <div className="flex justify-end gap-3 print:hidden mt-8">
+                <div className="flex justify-end gap-3 print:hidden mt-6">
                     <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print Report</button>
                 </div>
             </div>
@@ -4863,7 +4885,7 @@ const App = () => {
                   return <AuditWorksheet 
                       audit={activeAudit} 
                       onBack={() => setView('audit-list')} 
-                  onSaveDraft={async (updated: AuditSession) => {
+                      onSaveDraft={async (updated: AuditSession) => {
                           setIsSavingAudit(true);
                           try {
                               const saved = await updateAuditSession(updated.id, { ...updated, status: 'Draft' });
@@ -4895,7 +4917,7 @@ const App = () => {
                       }}
                   />;
               } else {
-                  return <AuditReport audit={activeAudit} onBack={() => setView('audit-list')} />;
+                  return <AuditReport audit={activeAudit} assets={assets} funds={funds} employees={employees} />;
               }
 
           case 'mdm-employees': return <EmployeeMasterView employees={employees} setEmployees={setEmployees} departments={departments} onLog={handleLog} userRole={userRole} />;
@@ -4959,7 +4981,12 @@ const App = () => {
                         {!isSidebarCollapsed && <span>Settings</span>}
                     </button>
                 )}
-                <button onClick={handleAuthSignOut} className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+                <button
+                    onClick={async () => {
+                        const ok = await requestConfirm({ title: 'Sign out?', message: 'Are you sure you want to sign out?', confirmLabel: 'Logout', cancelLabel: 'Cancel', variant: 'danger' });
+                        if (ok) handleAuthSignOut();
+                    }}
+                    className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}>
                     <LogOut size={20} />
                     {!isSidebarCollapsed && <span>Sign Out</span>}
                 </button>
