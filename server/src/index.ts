@@ -685,6 +685,96 @@ app.put('/api/users/:id', authMiddleware, asyncHandler(async (req, res) => {
   res.json(updated);
 }));
 
+// Maintenance (Officer only)
+app.post('/api/maintenance/export', authMiddleware, asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const [
+    departments,
+    locations,
+    funds,
+    categories,
+    employees,
+    catalog,
+    assets,
+    transactions,
+    mrs,
+    audits,
+    settings,
+    users,
+    logs,
+  ] = await Promise.all([
+    prisma.department.findMany(),
+    prisma.location.findMany(),
+    prisma.fundCluster.findMany(),
+    prisma.assetCategory.findMany(),
+    prisma.employee.findMany(),
+    prisma.catalogItem.findMany(),
+    prisma.asset.findMany(),
+    prisma.transaction.findMany({ include: { items: true } }),
+    prisma.memorandumReceipt.findMany({ include: { items: true } }),
+    prisma.auditSession.findMany({ include: { items: true } }),
+    prisma.systemSettings.findUnique({ where: { id: 1 } }),
+    prisma.user.findMany(),
+    prisma.activityLog.findMany({ orderBy: { timestamp: 'desc' }, take: 500 }),
+  ]);
+
+  res.json({
+    exportedAt: new Date().toISOString(),
+    data: {
+      departments,
+      locations,
+      funds,
+      categories,
+      employees,
+      catalog,
+      assets,
+      transactions,
+      mrs,
+      audits,
+      settings,
+      users,
+      logs,
+    },
+  });
+}));
+
+app.post('/api/maintenance/reset', authMiddleware, asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  return res.status(503).json({ message: 'Reset is disabled via API for safety. Please run the seed script manually if you need to reset demo data.' });
+}));
+
+app.post('/api/maintenance/health', authMiddleware, asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const issues: any[] = [];
+
+  const catalogNeg = await prisma.catalogItem.findMany({ where: { quantity: { lt: 0 } } });
+  catalogNeg.forEach((c) => issues.push({ type: 'catalog_negative_qty', id: c.id, message: `Catalog ${c.article} has negative quantity (${c.quantity}).` }));
+
+  const assetsNeg = await prisma.asset.findMany({ where: { quantity: { lt: 0 } } });
+  assetsNeg.forEach((a) => issues.push({ type: 'asset_negative_qty', id: a.id, message: `Asset ${a.propertyNumber} has negative quantity (${a.quantity}).` }));
+
+  const txnBad = await prisma.transaction.findMany({
+    where: { items: { some: { quantity: { lte: 0 } } } },
+    include: { items: true },
+  });
+  txnBad.forEach((t) => {
+    t.items.filter((i) => i.quantity <= 0).forEach((i) => {
+      issues.push({ type: 'transaction_invalid_qty', id: `${t.id}:${i.id}`, message: `Transaction ${t.transactionId} has item with quantity ${i.quantity}.` });
+    });
+  });
+
+  const auditsNoAsset = await prisma.auditItem.findMany({
+    where: { assetId: { equals: '' } }
+  });
+  auditsNoAsset.forEach((ai) => issues.push({ type: 'audit_missing_asset', id: ai.id, message: `Audit item ${ai.id} has missing asset reference.` }));
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    summary: { issues: issues.length },
+    issues,
+  });
+}));
+
 app.post('/api/audits', asyncHandler(async (req, res) => {
   const { sessionId, date, departmentId, locationId, description, items = [], status = 'Draft', createdBy = 'System', createdAt } = req.body || {};
   if (!sessionId || !date || !description) {

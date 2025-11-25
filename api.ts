@@ -561,6 +561,48 @@ export const updateSettingsApi = async (payload: any) => {
   return putJson<any>('/api/settings', payload);
 };
 
+export const exportMaintenance = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/maintenance/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const err: any = new Error(text || 'Failed to export data');
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
+
+export const resetMaintenance = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/maintenance/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const err: any = new Error(text || 'Failed to reset data');
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
+
+export const runHealthCheck = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/maintenance/health`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const err: any = new Error(text || 'Failed to run health check');
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
+
 // Users (Officer-only)
 export const getUsers = async () => fetchJson<any[]>('/api/users');
 export const createUser = async (payload: any) => postJson<any>('/api/users', payload);

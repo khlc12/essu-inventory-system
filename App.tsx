@@ -48,6 +48,9 @@ import {
   setAuthToken,
   createUser,
   updateUser,
+  exportMaintenance,
+  resetMaintenance,
+  runHealthCheck,
   updateSettingsApi
 } from './api';
 import { 
@@ -562,8 +565,9 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
 };
 
 // --- Settings Module ---
-const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, users = [], onCreateUser, onUpdateUser }: any) => {
+const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, users = [], onCreateUser, onUpdateUser, onAuthError }: any) => {
     const confirm = useContext(ConfirmContext);
+    const success = useContext(SuccessContext);
     const handleChange = (section: string, field: string, value: any) => {
         setSettings((prev: any) => ({
             ...prev,
@@ -666,11 +670,52 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                         Manage system data and backups.
                     </div>
                     <div className="flex gap-4">
-                        <button className="flex-1 px-4 py-2 border border-slate-300 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-50 text-slate-700" onClick={async () => await confirm({ title: 'Download backup', message: 'Download started (placeholder).', confirmLabel: 'OK', hideCancel: true, variant: 'info' })}>
+                        <button
+                            className="flex-1 px-4 py-2 border border-slate-300 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-50 text-slate-700"
+                            onClick={async () => {
+                                const ok = await confirm({ title: 'Export data?', message: 'Export database snapshot as JSON?', confirmLabel: 'Export', cancelLabel: 'Cancel', variant: 'info' });
+                                if (!ok) return;
+                                try {
+                                    const data = await exportMaintenance();
+                                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `essu-export-${new Date().toISOString().slice(0,19)}.json`;
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+                                    success('Exported data successfully.');
+                                } catch (err: any) {
+                                    await confirm({ title: 'Export failed', message: err?.message || 'Export failed.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
+                                }
+                            }}
+                        >
                             <Download size={16} /> Export DB
                         </button>
-                        <button className="flex-1 px-4 py-2 border border-red-200 bg-red-50 rounded-lg flex items-center justify-center gap-2 hover:bg-red-100 text-red-600" onClick={async () => await confirm({ title: 'Reset disabled', message: 'Reset function is disabled in this prototype.', confirmLabel: 'OK', hideCancel: true, variant: 'info' })}>
-                            <RefreshCw size={16} /> Reset Demo
+                        <button
+                            className="flex-1 px-4 py-2 border border-blue-200 bg-blue-50 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-100 text-blue-700"
+                            onClick={async () => {
+                                const ok = await confirm({ title: 'Run health check?', message: 'Check for data issues (invalid quantities, missing references)?', confirmLabel: 'Run Check', cancelLabel: 'Cancel', variant: 'info' });
+                                if (!ok) return;
+                                try {
+                                    const result = await runHealthCheck();
+                                    if (result?.issues?.length) {
+                                        const summary = result.issues.slice(0, 5).map((i: any) => `• ${i.message}`).join('\n');
+                                        await confirm({ title: `Found ${result.issues.length} issue(s)`, message: summary || 'See console for details.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
+                                    } else {
+                                        success('No data issues found.');
+                                    }
+                                } catch (err: any) {
+                                    if (err?.status === 401) {
+                                        await confirm({ title: 'Session expired', message: 'Please sign in again as Officer.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+                                        onAuthError?.();
+                                        return;
+                                    }
+                                    await confirm({ title: 'Health check failed', message: err?.message || 'Failed to run health check.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
+                                }
+                            }}
+                        >
+                            <RefreshCw size={16} /> Data Health Check
                         </button>
                     </div>
                 </div>
@@ -4749,6 +4794,7 @@ const App = () => {
                   setSettings={setSettings} 
                   userRole={userRole}
                   users={users}
+                  onAuthError={handleAuthError}
                   onSaveSettings={async (s: any) => {
                       try {
                           const changed = JSON.stringify(s) !== JSON.stringify(lastSavedSettings);
