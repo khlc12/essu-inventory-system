@@ -1,11 +1,9 @@
--- DropForeignKey
-ALTER TABLE `transaction` DROP FOREIGN KEY `Transaction_departmentId_fkey`;
-
--- DropIndex
-DROP INDEX `Transaction_departmentId_fkey` ON `transaction`;
+-- DropForeignKey (table name corrected for case-sensitive MySQL)
+ALTER TABLE `Transaction` DROP FOREIGN KEY `Transaction_departmentId_fkey`;
 
 -- AlterTable
-ALTER TABLE `transaction` ADD COLUMN `referenceNo` VARCHAR(191) NULL,
+ALTER TABLE `Transaction`
+    ADD COLUMN `referenceNo` VARCHAR(191) NULL,
     ADD COLUMN `supplier` VARCHAR(191) NULL,
     MODIFY `departmentId` VARCHAR(191) NULL;
 
