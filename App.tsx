@@ -309,8 +309,8 @@ const StockMovementChart = ({ transactions, departments }: { transactions: Trans
 
   return (
     <div className="w-full">
-       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-          <div className="flex gap-2">
+       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <div className="flex gap-2 flex-wrap">
              <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-[#006400]">
                 {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
              </select>
@@ -319,7 +319,7 @@ const StockMovementChart = ({ transactions, departments }: { transactions: Trans
                 {departments.map(d => <option key={d.id} value={d.id}>{d.code}</option>)}
              </select>
           </div>
-          <div className="flex bg-slate-100 rounded p-0.5">
+          <div className="flex bg-slate-100 rounded p-0.5 w-fit">
              <button onClick={() => setChartType('bar')} className={`p-1 rounded ${chartType === 'bar' ? 'bg-white shadow text-[#006400]' : 'text-slate-400 hover:text-slate-600'}`}><BarChart3 size={14} /></button>
              <button onClick={() => setChartType('line')} className={`p-1 rounded ${chartType === 'line' ? 'bg-white shadow text-[#006400]' : 'text-slate-400 hover:text-slate-600'}`}><LineChart size={14} /></button>
           </div>
@@ -429,7 +429,7 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                             <div className="text-sm text-slate-500 print:hidden">Showing {filteredPPE.length} assets</div>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left border border-slate-300">
+                            <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
                                 <thead className="bg-slate-100 text-slate-800 font-semibold">
                                     <tr>
                                         <th className="px-3 py-2 border border-slate-300">Property No.</th>
@@ -463,7 +463,8 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                 {activeTab === 'consumables' && (
                     <div className="space-y-4">
                         <h2 className="text-lg font-bold text-slate-800">Inventory of Supplies and Materials</h2>
-                        <table className="w-full text-sm text-left border border-slate-300">
+                        <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 font-semibold">
                                 <tr>
                                     <th className="px-3 py-2 border border-slate-300">Stock No.</th>
@@ -488,7 +489,7 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                                         <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency((c.unitValue || 0) * c.quantity)}</td>
                                     </tr>
                                 ))}
-                            </tbody>
+                                </tbody>
                         </table>
                     </div>
                 )}
@@ -496,7 +497,8 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                 {activeTab === 'movement' && (
                     <div className="space-y-4">
                         <h2 className="text-lg font-bold text-slate-800">Stock Movement Report</h2>
-                        <table className="w-full text-sm text-left border border-slate-300">
+                        <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 font-semibold">
                                 <tr>
                                     <th className="px-3 py-2 border border-slate-300">Date</th>
@@ -528,7 +530,8 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                 {activeTab === 'audit' && (
                     <div className="space-y-4">
                         <h2 className="text-lg font-bold text-slate-800">Audit & Physical Count Findings</h2>
-                        <table className="w-full text-sm text-left border border-slate-300">
+                        <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 font-semibold">
                                 <tr>
                                     <th className="px-3 py-2 border border-slate-300">Session ID</th>
@@ -856,32 +859,32 @@ const ActivityLogView = ({ logs, setLogs }: any) => {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800">Activity Logs</h1>
                     <p className="text-sm text-slate-500">Showing {pageItems.length} of {filtered.length} log entries</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full lg:w-auto">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); resetPagination(); }}
                             placeholder="Search description, user, reference..."
-                            className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                            className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-full sm:w-64"
                         />
                     </div>
                     <select
                         value={filterModule}
                         onChange={(e) => { setFilterModule(e.target.value); resetPagination(); }}
-                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-full sm:w-auto"
                     >
                         {modules.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <select
                         value={filterAction}
                         onChange={(e) => { setFilterAction(e.target.value); resetPagination(); }}
-                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-full sm:w-auto"
                     >
                         {actions.map((a) => <option key={a} value={a}>{a}</option>)}
                     </select>
@@ -889,7 +892,8 @@ const ActivityLogView = ({ logs, setLogs }: any) => {
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Timestamp</th>
@@ -926,6 +930,7 @@ const ActivityLogView = ({ logs, setLogs }: any) => {
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             <div className="flex items-center justify-between text-sm text-slate-600">
@@ -1045,7 +1050,8 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Property No.</th>
@@ -1477,7 +1483,8 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-             <table className="w-full text-sm text-left">
+             <div className="overflow-x-auto">
+             <table className="w-full min-w-[640px] text-sm text-left">
                 <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
                         <th className="px-6 py-4">Transaction ID</th>
@@ -1549,7 +1556,8 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
                         </tr>
                     )}
                 </tbody>
-            </table>
+             </table>
+             </div>
         </div>
 
         <div className="flex items-center justify-between text-sm text-slate-600">
@@ -1772,7 +1780,8 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
                         <div className="font-semibold text-slate-800">{formatDate(transaction.date)}</div>
                     </div>
                 </div>
-                <table className="w-full text-sm text-left mb-8">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left mb-8">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-4 py-2">Item</th>
@@ -1798,6 +1807,8 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
                         )}
                     </tbody>
                 </table>
+                </div>
+                </div>
                 
                 <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
                      <div className="text-center">
@@ -1897,7 +1908,8 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                 <table className="w-full text-sm text-left">
+                 <div className="overflow-x-auto">
+                 <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">MR Number</th>
@@ -2072,7 +2084,8 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
                      <div><span className="font-semibold">Custodian:</span> {getEmployeeFullName(emp)}</div>
                      <div className="text-right"><span className="font-semibold">Department:</span> {dept ? dept.name : mr.departmentId}</div>
                  </div>
-                 <table className="w-full text-sm text-left border border-slate-300 mb-8">
+                 <div className="overflow-x-auto">
+                 <table className="w-full min-w-[640px] text-sm text-left border border-slate-300 mb-8">
                     <thead className="bg-slate-100 text-slate-800 font-semibold">
                         <tr>
                             <th className="px-4 py-2 border border-slate-300">Property No.</th>
@@ -2095,6 +2108,8 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
                         )}
                     </tbody>
                  </table>
+                 </div>
+                 </div>
                  <div className="grid grid-cols-2 gap-20 mt-12 print:block print:grid-cols-2">
                      <div className="text-center">
                          <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
@@ -2202,7 +2217,8 @@ const AuditList = ({ audits, onNavigate, departments, locations }: any) => {
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-             <table className="w-full text-sm text-left">
+             <div className="overflow-x-auto">
+             <table className="w-full min-w-[640px] text-sm text-left">
                 <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
                         <th className="px-6 py-4">Session ID</th>
@@ -2268,7 +2284,8 @@ const AuditList = ({ audits, onNavigate, departments, locations }: any) => {
                         </tr>
                     )}
                 </tbody>
-            </table>
+             </table>
+             </div>
         </div>
 
         <div className="flex items-center justify-between text-sm text-slate-600">
@@ -2529,7 +2546,8 @@ const AuditWorksheet = ({ audit, onBack, onSaveDraft, onFinalize }: any) => {
                     />
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left border-collapse">
+                    <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-sm text-left border-collapse">
                         <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                             <tr>
                                 <th className="px-4 py-3">Property No</th>
@@ -2592,6 +2610,7 @@ const AuditWorksheet = ({ audit, onBack, onSaveDraft, onFinalize }: any) => {
                             })}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2641,7 +2660,8 @@ const AuditReport = ({ audit, assets, funds = [], employees = [] }: any) => {
                     </div>
                 </div>
 
-                <table className="w-full text-xs border border-slate-400 border-collapse">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-xs border border-slate-400 border-collapse">
                     <thead className="bg-slate-100">
                         <tr>
                             <th className="border border-slate-400 px-2 py-2 w-[10%]">ARTICLE</th>
@@ -2697,6 +2717,7 @@ const AuditReport = ({ audit, assets, funds = [], employees = [] }: any) => {
                         </tr>
                     </tbody>
                 </table>
+                </div>
 
                 <div className="flex justify-end gap-3 print:hidden mt-6">
                     <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print Report</button>
@@ -2841,7 +2862,8 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">ID</th>
@@ -2875,6 +2897,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {isModalOpen && (
@@ -3093,7 +3116,8 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Code</th>
@@ -3127,6 +3151,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {isModalOpen && (
@@ -3324,7 +3349,8 @@ const LocationMasterView = ({ locations, setLocations, onLog, userRole }: any) =
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-sm text-left">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm text-left">
                 <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
                         <th className="px-6 py-4">Code</th>
@@ -3356,6 +3382,7 @@ const LocationMasterView = ({ locations, setLocations, onLog, userRole }: any) =
                     )}
                 </tbody>
             </table>
+            </div>
         </div>
 
         {isModalOpen && (
@@ -3537,7 +3564,8 @@ const FundClusterMasterView = ({ funds, setFunds, onLog, userRole }: any) => {
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Code</th>
@@ -3569,6 +3597,7 @@ const FundClusterMasterView = ({ funds, setFunds, onLog, userRole }: any) => {
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {isModalOpen && (
@@ -3751,7 +3780,8 @@ const CategoryMasterView = ({ categories, setCategories, onLog, userRole }: any)
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Code</th>
@@ -3785,6 +3815,7 @@ const CategoryMasterView = ({ categories, setCategories, onLog, userRole }: any)
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {isModalOpen && (
@@ -4004,7 +4035,8 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: an
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Article</th>
@@ -4038,6 +4070,7 @@ const PPECatalogView = ({ catalog, setCatalog, categories, onLog, userRole }: an
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {isModalOpen && (
@@ -4272,7 +4305,8 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog, userRo
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm text-left">
                     <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Article</th>
@@ -4312,6 +4346,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog, userRo
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {isModalOpen && (
@@ -5040,10 +5075,10 @@ const App = () => {
         </aside>
 
         <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-             <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10 print:hidden">
-                <div className="flex items-center gap-4">
+             <header className="min-h-[64px] bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 px-4 md:px-6 shrink-0 z-10 print:hidden">
+                <div className="flex items-center gap-3">
                     <img src="/essu-seal.png" alt="ESSU Seal" className="w-10 h-10 rounded-full border border-slate-200 shadow-sm object-cover bg-white" />
-                    <h2 className="text-lg font-bold text-slate-700 hidden md:block">Supply Office Management System</h2>
+                    <h2 className="text-lg font-bold text-slate-700">Supply Office Management System</h2>
                 </div>
                 <div className="flex items-center gap-4 relative">
                     <button onClick={() => setShowNotifications((v) => !v)} className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
