@@ -25,7 +25,7 @@ import {
   INITIAL_SETTINGS,
   INITIAL_TRANSACTIONS,
   INITIAL_ASSETS,
-} from './constants';
+} from '../constants';
 
 dotenv.config();
 
