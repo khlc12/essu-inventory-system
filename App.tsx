@@ -1852,25 +1852,25 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
                 </table>
                 </div>
                 </div>
-                
-                <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                         <div className="text-xs font-bold uppercase">Requested By</div>
-                     </div>
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                         <div className="text-xs font-bold uppercase">Approved By</div>
-                     </div>
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                         <div className="text-xs font-bold uppercase">Received By</div>
-                     </div>
-                </div>
 
-                <div className="flex justify-end gap-3 print:hidden mt-8">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print</button>
-                </div>
+            <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                     <div className="text-xs font-bold uppercase">Requested By</div>
+                 </div>
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                     <div className="text-xs font-bold uppercase">Approved By</div>
+                 </div>
+                 <div className="text-center">
+                     <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                     <div className="text-xs font-bold uppercase">Received By</div>
+                 </div>
+            </div>
+
+            <div className="flex justify-end gap-3 print:hidden mt-8">
+                <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print</button>
+            </div>
             </div>
         </div>
     );
