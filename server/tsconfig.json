@@ -9,13 +9,11 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist",
+    "rootDir": ".",
     "resolveJsonModule": true,
     "baseUrl": ".",
-    "paths": {
-      "../../constants": ["../constants.ts"],
-      "../constants": ["../constants.ts"]
-    }
+    "paths": {}
   },
-  "include": ["src", "prisma", "../constants.ts"],
+  "include": ["src", "prisma", "constants.ts", "types.ts"],
   "exclude": ["node_modules", "dist"]
 }
