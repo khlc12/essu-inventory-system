@@ -464,33 +464,34 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                     <div className="space-y-4">
                         <h2 className="text-lg font-bold text-slate-800">Inventory of Supplies and Materials</h2>
                         <div className="overflow-x-auto">
-                        <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
-                            <thead className="bg-slate-100 text-slate-800 font-semibold">
-                                <tr>
-                                    <th className="px-3 py-2 border border-slate-300">Stock No.</th>
-                                    <th className="px-3 py-2 border border-slate-300">Item</th>
-                                    <th className="px-3 py-2 border border-slate-300">Unit</th>
-                                    <th className="px-3 py-2 border border-slate-300 text-center">Stock on Hand</th>
-                                    <th className="px-3 py-2 border border-slate-300 text-right">Unit Cost</th>
-                                    <th className="px-3 py-2 border border-slate-300 text-right">Total Value</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {catalog.filter((c: CatalogItem) => c.itemType === 'Consumable').map((c: CatalogItem) => (
-                                    <tr key={c.id}>
-                                        <td className="px-3 py-2 border border-slate-300 font-medium">{c.stockNumber}</td>
-                                        <td className="px-3 py-2 border border-slate-300">
-                                            <div>{c.article}</div>
-                                            <div className="text-xs text-slate-500">{c.description}</div>
-                                        </td>
-                                        <td className="px-3 py-2 border border-slate-300">{c.unit}</td>
-                                        <td className="px-3 py-2 border border-slate-300 text-center font-bold">{c.quantity}</td>
-                                        <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency(c.unitValue || 0)}</td>
-                                        <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency((c.unitValue || 0) * c.quantity)}</td>
+                            <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
+                                <thead className="bg-slate-100 text-slate-800 font-semibold">
+                                    <tr>
+                                        <th className="px-3 py-2 border border-slate-300">Stock No.</th>
+                                        <th className="px-3 py-2 border border-slate-300">Item</th>
+                                        <th className="px-3 py-2 border border-slate-300">Unit</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-center">Stock on Hand</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-right">Unit Cost</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-right">Total Value</th>
                                     </tr>
-                                ))}
+                                </thead>
+                                <tbody>
+                                    {catalog.filter((c: CatalogItem) => c.itemType === 'Consumable').map((c: CatalogItem) => (
+                                        <tr key={c.id}>
+                                            <td className="px-3 py-2 border border-slate-300 font-medium">{c.stockNumber}</td>
+                                            <td className="px-3 py-2 border border-slate-300">
+                                                <div>{c.article}</div>
+                                                <div className="text-xs text-slate-500">{c.description}</div>
+                                            </td>
+                                            <td className="px-3 py-2 border border-slate-300">{c.unit}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-center font-bold">{c.quantity}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency(c.unitValue || 0)}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency((c.unitValue || 0) * c.quantity)}</td>
+                                        </tr>
+                                    ))}
                                 </tbody>
-                        </table>
+                            </table>
+                        </div>
                     </div>
                 )}
 
@@ -498,32 +499,33 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                     <div className="space-y-4">
                         <h2 className="text-lg font-bold text-slate-800">Stock Movement Report</h2>
                         <div className="overflow-x-auto">
-                        <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
-                            <thead className="bg-slate-100 text-slate-800 font-semibold">
-                                <tr>
-                                    <th className="px-3 py-2 border border-slate-300">Date</th>
-                                    <th className="px-3 py-2 border border-slate-300">Transaction ID</th>
-                                    <th className="px-3 py-2 border border-slate-300">Type</th>
-                                    <th className="px-3 py-2 border border-slate-300">Item</th>
-                                    <th className="px-3 py-2 border border-slate-300">Source</th>
-                                    <th className="px-3 py-2 border border-slate-300 text-right">Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {stockMovementData.map((row: any) => (
-                                    <tr key={row.id}>
-                                        <td className="px-3 py-2 border border-slate-300">{formatDate(row.date)}</td>
-                                        <td className="px-3 py-2 border border-slate-300 font-medium">{row.transactionId}</td>
-                                        <td className="px-3 py-2 border border-slate-300">
-                                            <span className={`text-xs font-bold ${row.type === 'Stock In' ? 'text-green-700' : 'text-amber-700'}`}>{row.type.toUpperCase()}</span>
-                                        </td>
-                                        <td className="px-3 py-2 border border-slate-300">{row.itemName}</td>
-                                        <td className="px-3 py-2 border border-slate-300">{row.source}</td>
-                                        <td className="px-3 py-2 border border-slate-300 text-right font-bold">{row.quantity}</td>
+                            <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
+                                <thead className="bg-slate-100 text-slate-800 font-semibold">
+                                    <tr>
+                                        <th className="px-3 py-2 border border-slate-300">Date</th>
+                                        <th className="px-3 py-2 border border-slate-300">Transaction ID</th>
+                                        <th className="px-3 py-2 border border-slate-300">Type</th>
+                                        <th className="px-3 py-2 border border-slate-300">Item</th>
+                                        <th className="px-3 py-2 border border-slate-300">Source</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-right">Qty</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {stockMovementData.map((row: any) => (
+                                        <tr key={row.id}>
+                                            <td className="px-3 py-2 border border-slate-300">{formatDate(row.date)}</td>
+                                            <td className="px-3 py-2 border border-slate-300 font-medium">{row.transactionId}</td>
+                                            <td className="px-3 py-2 border border-slate-300">
+                                                <span className={`text-xs font-bold ${row.type === 'Stock In' ? 'text-green-700' : 'text-amber-700'}`}>{row.type.toUpperCase()}</span>
+                                            </td>
+                                            <td className="px-3 py-2 border border-slate-300">{row.itemName}</td>
+                                            <td className="px-3 py-2 border border-slate-300">{row.source}</td>
+                                            <td className="px-3 py-2 border border-slate-300 text-right font-bold">{row.quantity}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
@@ -531,35 +533,36 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                     <div className="space-y-4">
                         <h2 className="text-lg font-bold text-slate-800">Audit & Physical Count Findings</h2>
                         <div className="overflow-x-auto">
-                        <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
-                            <thead className="bg-slate-100 text-slate-800 font-semibold">
-                                <tr>
-                                    <th className="px-3 py-2 border border-slate-300">Session ID</th>
-                                    <th className="px-3 py-2 border border-slate-300">Date</th>
-                                    <th className="px-3 py-2 border border-slate-300">Scope</th>
-                                    <th className="px-3 py-2 border border-slate-300 text-center">Items Counted</th>
-                                    <th className="px-3 py-2 border border-slate-300 text-center text-red-600">Shortages</th>
-                                    <th className="px-3 py-2 border border-slate-300 text-right text-red-600">Total Shortage Value</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {audits.map((a: AuditSession) => {
-                                    const shortageCount = a.items.filter(i => i.status === 'Shortage').length;
-                                    const shortageVal = a.items.reduce((sum, i) => sum + (i.shortageOverageValue < 0 ? Math.abs(i.shortageOverageValue) : 0), 0);
-                                    
-                                    return (
-                                        <tr key={a.id}>
-                                            <td className="px-3 py-2 border border-slate-300 font-medium">{a.sessionId}</td>
-                                            <td className="px-3 py-2 border border-slate-300">{formatDate(a.date)}</td>
-                                            <td className="px-3 py-2 border border-slate-300">{a.description}</td>
-                                            <td className="px-3 py-2 border border-slate-300 text-center">{a.items.length}</td>
-                                            <td className="px-3 py-2 border border-slate-300 text-center font-bold text-red-600">{shortageCount}</td>
-                                            <td className="px-3 py-2 border border-slate-300 text-right font-bold text-red-600">{formatCurrency(shortageVal)}</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                            <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
+                                <thead className="bg-slate-100 text-slate-800 font-semibold">
+                                    <tr>
+                                        <th className="px-3 py-2 border border-slate-300">Session ID</th>
+                                        <th className="px-3 py-2 border border-slate-300">Date</th>
+                                        <th className="px-3 py-2 border border-slate-300">Scope</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-center">Items Counted</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-center text-red-600">Shortages</th>
+                                        <th className="px-3 py-2 border border-slate-300 text-right text-red-600">Total Shortage Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {audits.map((a: AuditSession) => {
+                                        const shortageCount = a.items.filter(i => i.status === 'Shortage').length;
+                                        const shortageVal = a.items.reduce((sum, i) => sum + (i.shortageOverageValue < 0 ? Math.abs(i.shortageOverageValue) : 0), 0);
+
+                                        return (
+                                            <tr key={a.id}>
+                                                <td className="px-3 py-2 border border-slate-300 font-medium">{a.sessionId}</td>
+                                                <td className="px-3 py-2 border border-slate-300">{formatDate(a.date)}</td>
+                                                <td className="px-3 py-2 border border-slate-300">{a.description}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center">{a.items.length}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center font-bold text-red-600">{shortageCount}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-right font-bold text-red-600">{formatCurrency(shortageVal)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </div>
