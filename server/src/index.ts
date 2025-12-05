@@ -17,9 +17,10 @@ app.use(express.json());
 // Apply auth to mutating routes
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method) && !req.path.startsWith('/api/auth')) {
-    return authMiddleware(req, res, next);
+    authMiddleware(req, res, next);
+  } else {
+    next();
   }
-  return next();
 });
 
 const ensureRole = (req: Request, res: Response, roles: string[]) => {
