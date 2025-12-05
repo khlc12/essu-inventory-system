@@ -9,8 +9,7 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "resolveJsonModule": true,
-    "allowImportingTsExtensions": true
+    "resolveJsonModule": true
   },
   "include": ["src", "prisma"],
   "exclude": ["node_modules", "dist"]
