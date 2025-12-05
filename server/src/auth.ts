@@ -15,10 +15,11 @@ export const signToken = (user: AuthUser) => {
   return jwt.sign(user, JWT_SECRET, { expiresIn: '12h' });
 };
 
-export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+export const authMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   const auth = req.headers.authorization;
   if (!auth || !auth.toLowerCase().startsWith('bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
   }
   const token = auth.slice(7);
   try {
@@ -26,7 +27,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
     (req as any).user = decoded;
     next();
   } catch (err) {
-    return res.status(401).json({ message: 'Invalid token' });
+    res.status(401).json({ message: 'Invalid token' });
   }
 };
 

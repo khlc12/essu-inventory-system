@@ -25,7 +25,7 @@ import {
   INITIAL_SETTINGS,
   INITIAL_TRANSACTIONS,
   INITIAL_ASSETS,
-} from '../../constants.ts';
+} from '../constants';
 
 dotenv.config();
 
@@ -248,7 +248,7 @@ async function main() {
         createdBy: txn.createdBy,
         createdAt: txn.createdAt ? new Date(txn.createdAt) : undefined,
         items: {
-          create: txn.items.map((item) => ({
+          create: txn.items.map((item: any) => ({
             id: item.id,
             catalogItemId: resolveCatalogItemId(item.catalogItemId),
             quantity: item.quantity,
@@ -272,7 +272,7 @@ async function main() {
         status: mr.status as MRStatus,
         remarks: mr.remarks || null,
         items: {
-          create: mr.items.map((item) => ({
+          create: mr.items.map((item: any) => ({
             assetId: item.assetId,
             propertyNumber: item.propertyNumber,
             description: item.description,
@@ -300,7 +300,7 @@ async function main() {
         createdAt: audit.createdAt ? toDate(audit.createdAt) : undefined,
         finalizedAt: audit.finalizedAt ? toDate(audit.finalizedAt) : null,
         items: {
-          create: audit.items.map((item) => ({
+          create: audit.items.map((item: any) => ({
             assetId: item.assetId,
             propertyNumber: item.propertyNumber,
             description: item.description,

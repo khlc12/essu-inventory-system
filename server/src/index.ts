@@ -5,7 +5,6 @@ import asyncHandler from 'express-async-handler';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { authMiddleware, requireRole, signToken } from './auth';
-import { authMiddleware, requireRole, signToken } from './auth';
 
 dotenv.config();
 
