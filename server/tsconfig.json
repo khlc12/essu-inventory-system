@@ -11,6 +11,6 @@
     "outDir": "dist",
     "resolveJsonModule": true
   },
-  "include": ["src", "prisma"],
+  "include": ["src", "prisma", "../constants.ts"],
   "exclude": ["node_modules", "dist"]
 }
