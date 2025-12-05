@@ -49,7 +49,11 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
   res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
 }));
 
+// Simple health checks
 app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
