@@ -1803,17 +1803,20 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
 
     return (
         <div className="space-y-6">
-            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to Transactions</button>
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]">
+                <ChevronLeft size={16} /> Back to Transactions
+            </button>
             <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm print:shadow-none print:border-none">
                 <ESSUHeader />
+
                 <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-200">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-800">{transaction.type} Transaction</h1>
                         <div className="text-slate-500">ID: {transaction.transactionId}</div>
                         {transaction.type === 'Stock In' ? (
-                          <div className="text-slate-500">Supplier: {transaction.supplier || '-'}</div>
+                            <div className="text-slate-500">Supplier: {transaction.supplier || '-'}</div>
                         ) : (
-                          <div className="text-slate-500">Department: {dept ? dept.name : transaction.departmentId || '-'}</div>
+                            <div className="text-slate-500">Department: {dept ? dept.name : transaction.departmentId || '-'}</div>
                         )}
                         {transaction.referenceNo && <div className="text-slate-500">Reference: {transaction.referenceNo}</div>}
                         {transaction.remarks && <div className="text-slate-500">Remarks: {transaction.remarks}</div>}
@@ -1823,60 +1826,62 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
                         <div className="font-semibold text-slate-800">{formatDate(transaction.date)}</div>
                     </div>
                 </div>
+
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm text-left mb-8">
-                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                        <tr>
-                            <th className="px-4 py-2">Item</th>
-                            <th className="px-4 py-2">Description</th>
-                            <th className="px-4 py-2 text-right">Qty</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {transaction.items?.map((item: TransactionItem) => {
-                            const catItem = catalog.find((c: CatalogItem) => c.id === item.catalogItemId);
-                            return (
-                                <tr key={item.id}>
-                                    <td className="px-4 py-2 font-medium">{catItem ? catItem.article : item.catalogItemId}</td>
-                                    <td className="px-4 py-2 text-slate-500">{catItem ? catItem.description : '-'}</td>
-                                    <td className="px-4 py-2 text-right font-bold">{item.quantity}</td>
-                                </tr>
-                            );
-                        })}
-                        {!transaction.items?.length && (
+                    <table className="w-full min-w-[640px] text-sm text-left mb-8">
+                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                             <tr>
-                                <td colSpan={3} className="px-4 py-3 text-center text-slate-400">No items recorded.</td>
+                                <th className="px-4 py-2">Item</th>
+                                <th className="px-4 py-2">Description</th>
+                                <th className="px-4 py-2 text-right">Qty</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
-              </div>
-            </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {transaction.items?.map((item: TransactionItem) => {
+                                const catItem = catalog.find((c: CatalogItem) => c.id === item.catalogItemId);
+                                return (
+                                    <tr key={item.id}>
+                                        <td className="px-4 py-2 font-medium">{catItem ? catItem.article : item.catalogItemId}</td>
+                                        <td className="px-4 py-2 text-slate-500">{catItem ? catItem.description : '-'}</td>
+                                        <td className="px-4 py-2 text-right font-bold">{item.quantity}</td>
+                                    </tr>
+                                );
+                            })}
+                            {!transaction.items?.length && (
+                                <tr>
+                                    <td colSpan={3} className="px-4 py-3 text-center text-slate-400">
+                                        No items recorded.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
 
-            <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
-              <div className="text-center">
-                <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                <div className="text-xs font-bold uppercase">Requested By</div>
-              </div>
-              <div className="text-center">
-                <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                <div className="text-xs font-bold uppercase">Approved By</div>
-              </div>
-              <div className="text-center">
-                <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
-                <div className="text-xs font-bold uppercase">Received By</div>
-              </div>
-            </div>
+                <div className="grid grid-cols-3 gap-8 mt-12 pt-12 border-t border-slate-200 print:block print:grid-cols-3">
+                    <div className="text-center">
+                        <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                        <div className="text-xs font-bold uppercase">Requested By</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                        <div className="text-xs font-bold uppercase">Approved By</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="mb-8 border-b border-slate-400 w-3/4 mx-auto"></div>
+                        <div className="text-xs font-bold uppercase">Received By</div>
+                    </div>
+                </div>
 
-            <div className="flex justify-end gap-3 print:hidden mt-8">
-              <button
-                className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
-                onClick={() => window.print()}
-              >
-                <Printer size={16} /> Print
-              </button>
+                <div className="flex justify-end gap-3 print:hidden mt-8">
+                    <button
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+                        onClick={() => window.print()}
+                    >
+                        <Printer size={16} /> Print
+                    </button>
+                </div>
             </div>
-          </div>
         </div>
     );
 };
@@ -1919,7 +1924,10 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
         <div className="space-y-6">
             <div className="flex justify-between items-center flex-wrap gap-3">
                 <h1 className="text-2xl font-bold text-slate-800">Memorandum Receipts</h1>
-                <button onClick={() => onNavigate('mr-new')} className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2">
+                <button
+                    onClick={() => onNavigate('mr-new')}
+                    className="px-4 py-2 bg-[#006400] hover:bg-[#004d00] text-white rounded-lg flex items-center gap-2"
+                >
                     <Plus size={16} /> Issue MR
                 </button>
             </div>
@@ -1934,87 +1942,134 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
                         className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[200px]"
                     />
                 </div>
-                <select value={status} onChange={(e) => setStatus(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]">
+                <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                >
                     <option value="All">All Status</option>
                     <option value="Active">Active</option>
                     <option value="Closed">Closed</option>
                 </select>
-                <select value={custodian} onChange={(e) => setCustodian(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[180px]">
+                <select
+                    value={custodian}
+                    onChange={(e) => setCustodian(e.target.value)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[180px]"
+                >
                     <option value="All">All Custodians</option>
-                    {employees.map((e: Employee) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
+                    {employees.map((e: Employee) => (
+                        <option key={e.id} value={e.id}>
+                            {getEmployeeFullName(e)}
+                        </option>
+                    ))}
                 </select>
                 <div className="flex gap-2 items-center text-sm text-slate-600 flex-wrap">
                     <div className="flex gap-2 items-center">
                         <span className="text-slate-500">From</span>
-                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]"
+                        />
                     </div>
                     <div className="flex gap-2 items-center">
                         <span className="text-slate-500">To</span>
-                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]" />
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="px-2 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]"
+                        />
                     </div>
                 </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                 <div className="overflow-x-auto">
-                 <table className="w-full min-w-[640px] text-sm text-left">
-                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4">MR Number</th>
-                            <th className="px-6 py-4">Date Issued</th>
-                            <th className="px-6 py-4">Custodian</th>
-                            <th className="px-6 py-4">Items</th>
-                            <th className="px-6 py-4 text-right">Total Value</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {filtered.map((m: MemorandumReceipt) => (
-                            <React.Fragment key={m.id}>
-                            <tr className="hover:bg-slate-50">
-                                <td className="px-6 py-3 font-medium text-[#006400]">{m.mrNumber}</td>
-                                <td className="px-6 py-3 text-slate-500">{formatDate(m.dateIssued)}</td>
-                                <td className="px-6 py-3 text-slate-700">{custodianName(m.employeeId)}</td>
-                                <td className="px-6 py-3 text-slate-600">{m.items?.length || 0} items</td>
-                                <td className="px-6 py-3 text-right font-semibold text-slate-800">{formatCurrency(totalValue(m.items || []))}</td>
-                                <td className="px-6 py-3">{statusBadge(m.status)}</td>
-                                <td className="px-6 py-3 text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Items"><ChevronRight size={16} className={`transition-transform ${expandedId === m.id ? 'rotate-90' : ''}`} /></button>
-                                        <button onClick={() => onNavigate('mr-detail', m)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Details"><Eye size={16} /></button>
-                                    </div>
-                                </td>
+                <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                            <tr>
+                                <th className="px-6 py-4">MR Number</th>
+                                <th className="px-6 py-4">Date Issued</th>
+                                <th className="px-6 py-4">Custodian</th>
+                                <th className="px-6 py-4">Items</th>
+                                <th className="px-6 py-4 text-right">Total Value</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
-                            {expandedId === m.id && (
-                                <tr className="bg-slate-50/60">
-                                    <td colSpan={7} className="px-6 py-3">
-                                        <div className="text-xs text-slate-500 mb-2">Items</div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                            {m.items?.map((item: MRItem) => (
-                                                <div key={item.assetId} className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between">
-                                                    <div>
-                                                        <div className="font-semibold text-slate-800">{item.propertyNumber}</div>
-                                                        <div className="text-xs text-slate-500">{item.description}</div>
-                                                    </div>
-                                                    <div className="text-right text-sm font-bold text-slate-800">{formatCurrency(item.unitValue)}</div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filtered.map((m: MemorandumReceipt) => (
+                                <React.Fragment key={m.id}>
+                                    <tr className="hover:bg-slate-50">
+                                        <td className="px-6 py-3 font-medium text-[#006400]">{m.mrNumber}</td>
+                                        <td className="px-6 py-3 text-slate-500">{formatDate(m.dateIssued)}</td>
+                                        <td className="px-6 py-3 text-slate-700">{custodianName(m.employeeId)}</td>
+                                        <td className="px-6 py-3 text-slate-600">{m.items?.length || 0} items</td>
+                                        <td className="px-6 py-3 text-right font-semibold text-slate-800">{formatCurrency(totalValue(m.items || []))}</td>
+                                        <td className="px-6 py-3">{statusBadge(m.status)}</td>
+                                        <td className="px-6 py-3 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
+                                                    className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"
+                                                    title="View Items"
+                                                >
+                                                    <ChevronRight
+                                                        size={16}
+                                                        className={`transition-transform ${expandedId === m.id ? 'rotate-90' : ''}`}
+                                                    />
+                                                </button>
+                                                <button
+                                                    onClick={() => onNavigate('mr-detail', m)}
+                                                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                                    title="Details"
+                                                >
+                                                    <Eye size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {expandedId === m.id && (
+                                        <tr className="bg-slate-50/60">
+                                            <td colSpan={7} className="px-6 py-3">
+                                                <div className="text-xs text-slate-500 mb-2">Items</div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {m.items?.map((item: MRItem) => (
+                                                        <div
+                                                            key={item.assetId}
+                                                            className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between"
+                                                        >
+                                                            <div>
+                                                                <div className="font-semibold text-slate-800">{item.propertyNumber}</div>
+                                                                <div className="text-xs text-slate-500">{item.description}</div>
+                                                            </div>
+                                                            <div className="text-right text-sm font-bold text-slate-800">{formatCurrency(item.unitValue)}</div>
+                                                        </div>
+                                                    ))}
+                                                    {(!m.items || m.items.length === 0) && (
+                                                        <div className="text-slate-400 text-sm">No items</div>
+                                                    )}
                                                 </div>
-                                            ))}
-                                            {(!m.items || m.items.length === 0) && <div className="text-slate-400 text-sm">No items</div>}
-                                        </div>
-                                        {m.remarks && <div className="mt-2 text-sm text-slate-600">Remarks: {m.remarks}</div>}
+                                                {m.remarks && (
+                                                    <div className="mt-2 text-sm text-slate-600">Remarks: {m.remarks}</div>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                            {filtered.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
+                                        No memorandum receipts found.
                                     </td>
                                 </tr>
                             )}
-                            </React.Fragment>
-                        ))}
-                        {filtered.length === 0 && (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-8 text-center text-slate-400">No memorandum receipts found.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -2117,61 +2172,83 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
     const dept = departments.find((d: Department) => d.id === mr.departmentId);
 
     return (
-         <div className="space-y-6">
-            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"><ChevronLeft size={16}/> Back to MR List</button>
+        <div className="space-y-6">
+            <button
+                onClick={onBack}
+                className="flex items-center gap-2 text-slate-500 hover:text-[#006400]"
+            >
+                <ChevronLeft size={16} /> Back to MR List
+            </button>
+
             <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
-                 <ESSUHeader />
-                 <h1 className="text-center text-xl font-bold uppercase mb-8">Memorandum Receipt for Property, Plant and Equipment</h1>
-                 <div className="grid grid-cols-2 gap-8 text-sm mb-6">
-                     <div>
-                         <span className="font-semibold">MR Number:</span> {mr.mrNumber}
-                     </div>
-                     <div className="text-right">
-                         <span className="font-semibold">Date:</span> {formatDate(mr.dateIssued)}
-                     </div>
-                     <div><span className="font-semibold">Custodian:</span> {getEmployeeFullName(emp)}</div>
-                     <div className="text-right"><span className="font-semibold">Department:</span> {dept ? dept.name : mr.departmentId}</div>
-                 </div>
-                 <div className="overflow-x-auto">
-                 <table className="w-full min-w-[640px] text-sm text-left border border-slate-300 mb-8">
-                    <thead className="bg-slate-100 text-slate-800 font-semibold">
-                        <tr>
-                            <th className="px-4 py-2 border border-slate-300">Property No.</th>
-                            <th className="px-4 py-2 border border-slate-300">Description</th>
-                            <th className="px-4 py-2 border border-slate-300 text-right">Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {mr.items?.map((item: MRItem) => (
-                            <tr key={item.assetId}>
-                                 <td className="px-4 py-2 border border-slate-300">{item.propertyNumber}</td>
-                                 <td className="px-4 py-2 border border-slate-300">{item.description}</td>
-                                 <td className="px-4 py-2 border border-slate-300 text-right">{formatCurrency(item.unitValue)}</td>
-                            </tr>
-                        ))}
-                        {!mr.items?.length && (
-                            <tr>
-                                <td colSpan={3} className="px-4 py-3 text-center text-slate-400 border border-slate-300">No items.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                 </table>
-                 </div>
-                 </div>
-                 <div className="grid grid-cols-2 gap-20 mt-12 print:block print:grid-cols-2">
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
-                         <div className="text-sm font-bold uppercase">Received By</div>
-                         <div className="text-xs">Signature over Printed Name</div>
-                     </div>
-                     <div className="text-center">
-                         <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
-                         <div className="text-sm font-bold uppercase">Issued By</div>
-                         <div className="text-xs">Supply Officer</div>
-                     </div>
+                <ESSUHeader />
+                <h1 className="text-center text-xl font-bold uppercase mb-8">
+                    Memorandum Receipt for Property, Plant and Equipment
+                </h1>
+
+                <div className="grid grid-cols-2 gap-8 text-sm mb-6">
+                    <div>
+                        <span className="font-semibold">MR Number:</span> {mr.mrNumber}
+                    </div>
+                    <div className="text-right">
+                        <span className="font-semibold">Date:</span> {formatDate(mr.dateIssued)}
+                    </div>
+                    <div>
+                        <span className="font-semibold">Custodian:</span> {getEmployeeFullName(emp)}
+                    </div>
+                    <div className="text-right">
+                        <span className="font-semibold">Department:</span> {dept ? dept.name : mr.departmentId}
+                    </div>
                 </div>
-                 <div className="flex justify-end gap-3 print:hidden mt-8">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200" onClick={() => window.print()}><Printer size={16}/> Print MR</button>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-sm text-left border border-slate-300 mb-8">
+                        <thead className="bg-slate-100 text-slate-800 font-semibold">
+                            <tr>
+                                <th className="px-4 py-2 border border-slate-300">Property No.</th>
+                                <th className="px-4 py-2 border border-slate-300">Description</th>
+                                <th className="px-4 py-2 border border-slate-300 text-right">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {mr.items?.map((item: MRItem) => (
+                                <tr key={item.assetId}>
+                                    <td className="px-4 py-2 border border-slate-300">{item.propertyNumber}</td>
+                                    <td className="px-4 py-2 border border-slate-300">{item.description}</td>
+                                    <td className="px-4 py-2 border border-slate-300 text-right">{formatCurrency(item.unitValue)}</td>
+                                </tr>
+                            ))}
+                            {!mr.items?.length && (
+                                <tr>
+                                    <td colSpan={3} className="px-4 py-3 text-center text-slate-400 border border-slate-300">
+                                        No items.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="grid grid-cols-2 gap-20 mt-12 print:block print:grid-cols-2">
+                    <div className="text-center">
+                        <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                        <div className="text-sm font-bold uppercase">Received By</div>
+                        <div className="text-xs">Signature over Printed Name</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="mb-8 border-b border-black w-3/4 mx-auto"></div>
+                        <div className="text-sm font-bold uppercase">Issued By</div>
+                        <div className="text-xs">Supply Officer</div>
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 print:hidden mt-8">
+                    <button
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+                        onClick={() => window.print()}
+                    >
+                        <Printer size={16} /> Print MR
+                    </button>
                 </div>
             </div>
         </div>
