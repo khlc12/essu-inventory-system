@@ -17,7 +17,10 @@ import {
   LogEntry
 } from './types';
 
-const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:4000';
+const API_BASE_URL =
+  (import.meta as any)?.env?.VITE_API_BASE_URL?.trim() ||
+  import.meta?.env?.VITE_API_BASE_URL?.trim() ||
+  'https://essu-inventory-system-production.up.railway.app';
 
 let authToken: string | null = null;
 export const setAuthToken = (token: string | null) => { authToken = token; };
