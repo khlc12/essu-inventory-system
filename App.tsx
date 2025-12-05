@@ -979,7 +979,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
             const matchesDept = filterDept === 'All' || a.departmentId === filterDept;
             const matchesLoc = filterLoc === 'All' || a.locationId === filterLoc;
             const matchesYear = filterYear === 'All' || new Date(a.dateAcquired).getFullYear().toString() === filterYear.toString();
-            
+
             const item = catalog.find((c: CatalogItem) => c.id === a.catalogItemId);
             const itemName = item ? item.article.toLowerCase() : '';
             const propNo = a.propertyNumber.toLowerCase();
@@ -1006,7 +1006,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
             variant: 'danger'
         });
         if (!ok) return;
-        const updated = assets.map((a: Asset) => a.id === id ? { ...a, status: 'Archived', updatedAt: new Date().toISOString() } : a);
+        const updated = assets.map((a: Asset) => (a.id === id ? { ...a, status: 'Archived', updatedAt: new Date().toISOString() } : a));
         setAssets(updated);
         if (onLog) onLog('Archived Asset', 'Asset Registry', `Archived asset ID: ${id}`, id);
     };
@@ -1023,90 +1023,130 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input 
-                        type="text" 
-                        placeholder="Search Property No or Item Name..." 
+                    <input
+                        type="text"
+                        placeholder="Search Property No or Item Name..."
                         className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                     <option value="All">All Status</option>
                     <option value="Active">Active</option>
                     <option value="Under Repair">Under Repair</option>
                     <option value="Missing">Missing</option>
                     <option value="Retired">Retired</option>
                 </select>
-                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
                     <option value="All">All Departments</option>
-                    {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.code}</option>)}
+                    {departments.map((d: Department) => (
+                        <option key={d.id} value={d.id}>
+                            {d.code}
+                        </option>
+                    ))}
                 </select>
-                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterLoc} onChange={e => setFilterLoc(e.target.value)}>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterLoc} onChange={(e) => setFilterLoc(e.target.value)}>
                     <option value="All">All Locations</option>
-                    {locations.map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    {locations.map((l: Location) => (
+                        <option key={l.id} value={l.id}>
+                            {l.name}
+                        </option>
+                    ))}
                 </select>
-                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]" value={filterYear} onChange={e => setFilterYear(e.target.value)}>
+                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]" value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
                     <option value="All">All Years</option>
-                    {availableYears.map((y: any) => <option key={y} value={y}>{y}</option>)}
+                    {availableYears.map((y: any) => (
+                        <option key={y} value={y}>
+                            {y}
+                        </option>
+                    ))}
                 </select>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm text-left">
-                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4">Property No.</th>
-                            <th className="px-6 py-4">Item Name</th>
-                            <th className="px-6 py-4">Custodian</th>
-                            <th className="px-6 py-4">Location</th>
-                            <th className="px-6 py-4">Date Acquired</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {filteredAssets.map((asset: Asset) => {
-                            const item = catalog.find((c: CatalogItem) => c.id === asset.catalogItemId);
-                            const custodian = employees.find((e: Employee) => e.id === asset.custodianId);
-                            const location = locations.find((l: Location) => l.id === asset.locationId);
-                            
-                            return (
-                                <tr key={asset.id} className="hover:bg-slate-50">
-                                    <td className="px-6 py-3 font-medium text-[#006400]">{asset.propertyNumber}</td>
-                                    <td className="px-6 py-3">
-                                        <div className="font-medium text-slate-800">{item ? item.article : 'Unknown Item'}</div>
-                                        <div className="text-xs text-slate-500 truncate max-w-[200px]">{asset.description}</div>
-                                    </td>
-                                    <td className="px-6 py-3 text-slate-600">{getEmployeeFullName(custodian)}</td>
-                                    <td className="px-6 py-3 text-slate-600">{location ? location.name : '-'}</td>
-                                    <td className="px-6 py-3 text-slate-500">{formatDate(asset.dateAcquired)}</td>
-                                    <td className="px-6 py-3">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium 
-                                            ${asset.status === 'Active' ? 'bg-green-100 text-[#006400]' : 
-                                              asset.status === 'Missing' ? 'bg-red-100 text-red-700' : 
-                                              'bg-slate-100 text-slate-600'}`}>
-                                            {asset.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-3 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <button onClick={() => onNavigate('asset-detail', asset)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded" title="View Details"><Eye size={16} /></button>
-                                            <button onClick={() => handleEdit(asset)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Pencil size={16} /></button>
-                                            {userRole === 'Officer' && <button onClick={() => handleDelete(asset.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded" title="Delete"><Trash2 size={16} /></button>}
-                                        </div>
+                    <table className="w-full min-w-[640px] text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                            <tr>
+                                <th className="px-6 py-4">Property No.</th>
+                                <th className="px-6 py-4">Item Name</th>
+                                <th className="px-6 py-4">Custodian</th>
+                                <th className="px-6 py-4">Location</th>
+                                <th className="px-6 py-4">Date Acquired</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredAssets.map((asset: Asset) => {
+                                const item = catalog.find((c: CatalogItem) => c.id === asset.catalogItemId);
+                                const custodian = employees.find((e: Employee) => e.id === asset.custodianId);
+                                const location = locations.find((l: Location) => l.id === asset.locationId);
+
+                                return (
+                                    <tr key={asset.id} className="hover:bg-slate-50">
+                                        <td className="px-6 py-3 font-medium text-[#006400]">{asset.propertyNumber}</td>
+                                        <td className="px-6 py-3">
+                                            <div className="font-medium text-slate-800">{item ? item.article : 'Unknown Item'}</div>
+                                            <div className="text-xs text-slate-500 truncate max-w-[200px]">{asset.description}</div>
+                                        </td>
+                                        <td className="px-6 py-3 text-slate-600">{getEmployeeFullName(custodian)}</td>
+                                        <td className="px-6 py-3 text-slate-600">{location ? location.name : '-'}</td>
+                                        <td className="px-6 py-3 text-slate-500">{formatDate(asset.dateAcquired)}</td>
+                                        <td className="px-6 py-3">
+                                            <span
+                                                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                    asset.status === 'Active'
+                                                        ? 'bg-green-100 text-[#006400]'
+                                                        : asset.status === 'Missing'
+                                                        ? 'bg-red-100 text-red-700'
+                                                        : 'bg-slate-100 text-slate-600'
+                                                }`}
+                                            >
+                                                {asset.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-3 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => onNavigate('asset-detail', asset)}
+                                                    className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"
+                                                    title="View Details"
+                                                >
+                                                    <Eye size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleEdit(asset)}
+                                                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                                    title="Edit"
+                                                >
+                                                    <Pencil size={16} />
+                                                </button>
+                                                {userRole === 'Officer' && (
+                                                    <button
+                                                        onClick={() => handleDelete(asset.id)}
+                                                        className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {filteredAssets.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
+                                        No assets found matching your criteria.
                                     </td>
                                 </tr>
-                            );
-                        })}
-                        {filteredAssets.length === 0 && (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-8 text-center text-slate-400">No assets found matching your criteria.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
