@@ -242,7 +242,7 @@ async function main() {
         transactionId: txn.transactionId,
         date: toDate(txn.date),
         type: mapTransactionType(txn.type),
-        departmentId: resolveDepartmentId(txn.departmentId),
+        departmentId: txn.departmentId ? resolveDepartmentId(txn.departmentId) : null,
         status: txn.status as TransactionStatus,
         remarks: txn.remarks || null,
         createdBy: txn.createdBy,
