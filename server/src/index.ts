@@ -155,6 +155,13 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   }
   const userInfo = await userResponse.json();
 
+  console.log('[SSO] userinfo payload', {
+    email: userInfo?.email,
+    department: userInfo?.department,
+    position: userInfo?.position || userInfo?.job_title || userInfo?.title,
+    roles: userInfo?.roles,
+  });
+
   if (!isAllowedUser(userInfo)) {
     return res.status(403).json({ message: 'Access denied: not in allowed department/role/domain.' });
   }
