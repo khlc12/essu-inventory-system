@@ -35,11 +35,23 @@ const verifyState = (token: string) => {
 };
 
 const mapRoleFromUserInfo = (userInfo: any): 'Officer' | 'Staff' => {
-  const position = (userInfo?.position || '').toLowerCase();
   const dept = (userInfo?.department || '').toLowerCase();
-  const inSupply = dept.includes('supply office');
-  if (inSupply && position.includes('supply officer')) return 'Officer';
-  if (inSupply && position.includes('officer')) return 'Officer';
+  const position = (
+    userInfo?.position ||
+    userInfo?.job_title ||
+    userInfo?.title ||
+    ''
+  ).toLowerCase();
+  const roles: string[] = (userInfo?.roles || []).map((r: any) => String(r).toLowerCase());
+
+  const inSupply = dept.includes('supply');
+  const looksOfficer =
+    position.includes('supply officer') ||
+    position.includes('officer') ||
+    roles.some((r) => ['admin', 'officer', 'supply_officer', 'supply officer'].includes(r));
+
+  if (inSupply && looksOfficer) return 'Officer';
+  if (inSupply) return 'Staff';
   return 'Staff';
 };
 
