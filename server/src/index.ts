@@ -20,6 +20,9 @@ const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || '';
 const OAUTH_SCOPES = process.env.OAUTH_SCOPES || 'openid profile email';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.VITE_APP_URL || 'http://localhost:3000';
 const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'state-secret';
+const ALLOWED_DEPARTMENTS = (process.env.SSO_ALLOWED_DEPARTMENTS || '').split(',').map((s) => s.trim()).filter(Boolean).map((s) => s.toLowerCase());
+const ALLOWED_ROLES = (process.env.SSO_ALLOWED_ROLES || '').split(',').map((s) => s.trim()).filter(Boolean).map((s) => s.toLowerCase());
+const ALLOWED_EMAIL_DOMAIN = (process.env.SSO_ALLOWED_EMAIL_DOMAIN || '').trim().toLowerCase();
 
 const generateState = () => jwt.sign({ nonce: randomUUID() }, STATE_SECRET, { expiresIn: '10m' });
 const verifyState = (token: string) => {
@@ -32,13 +35,19 @@ const verifyState = (token: string) => {
 };
 
 const mapRoleFromUserInfo = (userInfo: any): 'Officer' | 'Staff' => {
-  const roles: string[] = userInfo?.roles || [];
   const position = (userInfo?.position || '').toLowerCase();
-  const isOfficer = roles.some((r) => ['admin', 'officer', 'supply_officer'].includes(String(r).toLowerCase())) || position.includes('officer');
-  return isOfficer ? 'Officer' : 'Staff';
+  const dept = (userInfo?.department || '').toLowerCase();
+  const inSupply = dept.includes('supply office');
+  if (inSupply && position.includes('supply officer')) return 'Officer';
+  if (inSupply && position.includes('officer')) return 'Officer';
+  return 'Staff';
 };
 
 const normalizeEmail = (value: string | undefined | null) => (value || '').trim().toLowerCase();
+const isAllowedUser = (userInfo: any) => {
+  const dept = (userInfo?.department || '').toLowerCase();
+  return dept.includes('supply office');
+};
 
 app.use(cors());
 app.use(express.json());
@@ -133,6 +142,10 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: `Failed to load user info: ${text || userResponse.statusText}` });
   }
   const userInfo = await userResponse.json();
+
+  if (!isAllowedUser(userInfo)) {
+    return res.status(403).json({ message: 'Access denied: not in allowed department/role/domain.' });
+  }
 
   const username = normalizeEmail(userInfo.email) || userInfo.username || userInfo.sub;
   if (!username) return res.status(400).json({ message: 'User info missing identifier.' });
