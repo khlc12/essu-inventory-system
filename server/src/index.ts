@@ -4,6 +4,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import asyncHandler from 'express-async-handler';
 import { Prisma } from '@prisma/client';
+import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import { prisma } from './prisma';
 import { authMiddleware, requireRole, signToken } from './auth';
 
@@ -11,6 +13,32 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4000;
+const OAUTH_PROVIDER_URL = process.env.OAUTH_PROVIDER_URL || process.env.SSO_PROVIDER_URL || '';
+const OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID || '';
+const OAUTH_CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET || '';
+const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || '';
+const OAUTH_SCOPES = process.env.OAUTH_SCOPES || 'openid profile email';
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.VITE_APP_URL || 'http://localhost:3000';
+const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'state-secret';
+
+const generateState = () => jwt.sign({ nonce: randomUUID() }, STATE_SECRET, { expiresIn: '10m' });
+const verifyState = (token: string) => {
+  try {
+    jwt.verify(token, STATE_SECRET);
+    return true;
+  } catch (err) {
+    return false;
+  }
+};
+
+const mapRoleFromUserInfo = (userInfo: any): 'Officer' | 'Staff' => {
+  const roles: string[] = userInfo?.roles || [];
+  const position = (userInfo?.position || '').toLowerCase();
+  const isOfficer = roles.some((r) => ['admin', 'officer', 'supply_officer'].includes(String(r).toLowerCase())) || position.includes('officer');
+  return isOfficer ? 'Officer' : 'Staff';
+};
+
+const normalizeEmail = (value: string | undefined | null) => (value || '').trim().toLowerCase();
 
 app.use(cors());
 app.use(express.json());
@@ -47,6 +75,87 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
   }
   const token = signToken({ id: user.id, username: user.username, role: user.role as any });
   res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+}));
+
+app.get('/api/auth/me', authMiddleware, asyncHandler(async (req, res) => {
+  const user = (req as any).user;
+  res.json({ user });
+}));
+
+app.get('/api/auth/sso/redirect', asyncHandler(async (_req, res) => {
+  if (!OAUTH_PROVIDER_URL || !OAUTH_CLIENT_ID || !OAUTH_REDIRECT_URI) {
+    return res.status(500).json({ message: 'SSO is not configured.' });
+  }
+  const state = generateState();
+  const params = new URLSearchParams({
+    client_id: OAUTH_CLIENT_ID,
+    redirect_uri: OAUTH_REDIRECT_URI,
+    response_type: 'code',
+    scope: OAUTH_SCOPES,
+    state,
+  });
+  const url = `${OAUTH_PROVIDER_URL}/oauth/authorize?${params.toString()}`;
+  res.json({ url, state });
+}));
+
+app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
+  const { code, state } = req.query as { code?: string; state?: string };
+  if (!code || !state) return res.status(400).json({ message: 'Missing code or state' });
+  if (!verifyState(state)) return res.status(400).json({ message: 'Invalid state' });
+  if (!OAUTH_PROVIDER_URL || !OAUTH_CLIENT_ID || !OAUTH_CLIENT_SECRET || !OAUTH_REDIRECT_URI) {
+    return res.status(500).json({ message: 'SSO is not configured.' });
+  }
+
+  const tokenResponse = await fetch(`${OAUTH_PROVIDER_URL}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      client_id: OAUTH_CLIENT_ID,
+      client_secret: OAUTH_CLIENT_SECRET,
+      code,
+      redirect_uri: OAUTH_REDIRECT_URI,
+    }),
+  });
+  if (!tokenResponse.ok) {
+    const text = await tokenResponse.text();
+    return res.status(400).json({ message: `Token exchange failed: ${text || tokenResponse.statusText}` });
+  }
+  const tokenJson = await tokenResponse.json();
+  const accessToken = tokenJson.access_token;
+  if (!accessToken) return res.status(400).json({ message: 'No access token returned by provider.' });
+
+  const userResponse = await fetch(`${OAUTH_PROVIDER_URL}/oauth/userinfo`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!userResponse.ok) {
+    const text = await userResponse.text();
+    return res.status(400).json({ message: `Failed to load user info: ${text || userResponse.statusText}` });
+  }
+  const userInfo = await userResponse.json();
+
+  const username = normalizeEmail(userInfo.email) || userInfo.username || userInfo.sub;
+  if (!username) return res.status(400).json({ message: 'User info missing identifier.' });
+  const role = mapRoleFromUserInfo(userInfo);
+  const passwordHash = randomUUID();
+
+  const user = await prisma.user.upsert({
+    where: { username },
+    update: { role, status: 'Active' },
+    create: { username, passwordHash, role, status: 'Active' },
+  });
+
+  const token = signToken({ id: user.id, username: user.username, role: user.role as any });
+  const userPayload = { id: user.id, username: user.username, role: user.role };
+
+  const userB64 = Buffer.from(JSON.stringify(userPayload)).toString('base64url');
+  const redirectUrl = `${FRONTEND_BASE_URL}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(userB64)}`;
+
+  if (req.headers.accept?.includes('text/html')) {
+    res.redirect(redirectUrl);
+  } else {
+    res.json({ token, user: userPayload, redirectUrl });
+  }
 }));
 
 // Simple health checks

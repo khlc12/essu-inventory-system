@@ -482,6 +482,26 @@ export const login = async (username: string, password: string) => {
   return json;
 };
 
+export const getSsoRedirect = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/auth/sso/redirect`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Failed to start SSO');
+  }
+  return res.json();
+};
+
+export const getCurrentUser = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: { ...authHeaders() } });
+  if (!res.ok) {
+    const text = await res.text();
+    const err: any = new Error(text || 'Failed to load current user');
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
+
 export const createTransaction = async (payload: Partial<Transaction>) => {
   const res = await fetch(`${API_BASE_URL}/api/transactions`, {
     method: 'POST',

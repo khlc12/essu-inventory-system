@@ -45,6 +45,8 @@ import {
   updateAuditSession,
   createActivityLog,
   login,
+  getSsoRedirect,
+  getCurrentUser,
   setAuthToken,
   createUser,
   updateUser,
@@ -753,7 +755,7 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
 };
 
 // --- Landing/Login Page Component ---
-const LandingPage = ({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) => {
+const LandingPage = ({ onLogin, onStartSso }: { onLogin: (username: string, password: string) => Promise<void>; onStartSso: () => Promise<void> }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -769,6 +771,18 @@ const LandingPage = ({ onLogin }: { onLogin: (username: string, password: string
         setError(err?.message || 'Login failed');
       })
       .finally(() => setIsLoading(false));
+  };
+
+  const handleSso = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      await onStartSso();
+    } catch (err: any) {
+      setError(err?.message || 'Could not start SSO');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -822,6 +836,17 @@ const LandingPage = ({ onLogin }: { onLogin: (username: string, password: string
                     {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Authenticating...</span></> : <span>Sign In</span>}
                  </button>
               </form>
+              <div className="mt-6">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-2 text-center">Or</div>
+                <button
+                  type="button"
+                  onClick={handleSso}
+                  disabled={isLoading}
+                  className="w-full border border-slate-200 hover:border-[#0a4d0a] text-slate-700 hover:text-[#0a4d0a] font-semibold py-3 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  <LogIn className="w-4 h-4" /> Sign in with HR SSO
+                </button>
+              </div>
            </div>
         </div>
       </div>
@@ -4627,6 +4652,48 @@ const App = () => {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ssoToken = params.get('sso_token');
+    const ssoUser = params.get('sso_user');
+    if (!ssoToken) return;
+
+    const finish = async () => {
+      let user = null;
+      if (ssoUser) {
+        try {
+          user = JSON.parse(atob(ssoUser));
+        } catch {
+          user = null;
+        }
+      }
+      setAuthToken(ssoToken);
+      if (!user) {
+        try {
+          const me = await getCurrentUser();
+          user = me?.user;
+        } catch {
+          user = null;
+        }
+      }
+      if (user) {
+        const payload = { token: ssoToken, user };
+        setAuth(payload);
+        setIsAuthenticated(true);
+        setAuthToken(ssoToken);
+        localStorage.setItem('auth', JSON.stringify(payload));
+        setSuccessMessage('Signed in via SSO.');
+      }
+    };
+
+    finish().finally(() => {
+      params.delete('sso_token');
+      params.delete('sso_user');
+      const newUrl = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
+      window.history.replaceState({}, '', newUrl);
+    });
+  }, []);
+
+  useEffect(() => {
     const load = async () => {
       if (!isAuthenticated || !auth?.token) {
         setIsBootstrapping(false);
@@ -4843,11 +4910,16 @@ const App = () => {
       setSuccessMessage('Signed in successfully.');
   };
 
+  const handleStartSso = async () => {
+      const { url } = await getSsoRedirect();
+      window.location.href = url;
+  };
+
   if (!isAuthenticated) {
       return (
         <ConfirmContext.Provider value={requestConfirm}>
           <SuccessContext.Provider value={setSuccessMessage}>
-            <LandingPage onLogin={handleAuthLogin} />
+            <LandingPage onLogin={handleAuthLogin} onStartSso={handleStartSso} />
             <ConfirmDialog state={confirmState} onResolve={handleConfirmResolve} />
           </SuccessContext.Provider>
         </ConfirmContext.Provider>
