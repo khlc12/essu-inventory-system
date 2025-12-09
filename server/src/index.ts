@@ -156,7 +156,7 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   const userInfo = await userResponse.json();
 
   if (!isAllowedUser(userInfo)) {
-    const msg = 'Access denied: not in allowed department/role/domain.';
+    const msg = 'You don\'t have permission to use this system. Only Supply Office accounts (Supply Officer/Staff) can sign in.';
     if (req.headers.accept?.includes('text/html')) {
       const redirectUrl = `${FRONTEND_BASE_URL}?sso_error=${encodeURIComponent(msg)}`;
       return res.redirect(redirectUrl);
