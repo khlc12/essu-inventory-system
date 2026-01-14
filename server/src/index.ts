@@ -125,13 +125,29 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
   if (user.status !== 'Active') {
     return res.status(403).json({ message: 'Account is inactive' });
   }
-  const token = signToken({ id: user.id, username: user.username, role: user.role as any });
-  res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  const token = signToken({ id: user.id, username: user.username, role: user.role as any, authMethod: 'local' });
+  res.json({ token, user: { id: user.id, username: user.username, role: user.role, authMethod: 'local' } });
 }));
 
 app.get('/api/auth/me', authMiddleware, asyncHandler(async (req, res) => {
   const user = (req as any).user;
   res.json({ user });
+}));
+
+app.post('/api/auth/logout', authMiddleware, asyncHandler(async (req, res) => {
+  const user = (req as any).user as { id?: string; authMethod?: string } | undefined;
+  const isSso = user?.authMethod === 'sso' || (user?.id ? hrmsTokenStore.has(user.id) : false);
+  if (user?.id) hrmsTokenStore.delete(user.id);
+
+  if (!isSso || !OAUTH_PROVIDER_URL) {
+    return res.json({ logoutUrl: null, isSso: false });
+  }
+
+  const redirectBase = FRONTEND_BASE_URL.replace(/\/$/, '');
+  const redirectUri = `${redirectBase}/?sso_logged_out=1`;
+  const logoutUrl = `${OAUTH_PROVIDER_URL.replace(/\/$/, '')}/oauth/end-session?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+  res.json({ logoutUrl, isSso: true, redirectUri });
 }));
 
 app.get('/api/auth/sso/redirect', asyncHandler(async (_req, res) => {
@@ -207,8 +223,8 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   });
   storeHrmsToken(user.id, tokenJson);
 
-  const token = signToken({ id: user.id, username: user.username, role: user.role as any });
-  const userPayload = { id: user.id, username: user.username, role: user.role };
+  const token = signToken({ id: user.id, username: user.username, role: user.role as any, authMethod: 'sso' });
+  const userPayload = { id: user.id, username: user.username, role: user.role, authMethod: 'sso' };
 
   const userB64 = Buffer.from(JSON.stringify(userPayload)).toString('base64url');
   const redirectUrl = `${FRONTEND_BASE_URL}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(userB64)}`;

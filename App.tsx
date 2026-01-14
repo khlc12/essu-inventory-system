@@ -47,6 +47,7 @@ import {
   updateAuditSession,
   createActivityLog,
   login,
+  startLogout,
   getSsoRedirect,
   getCurrentUser,
   setAuthToken,
@@ -841,15 +842,24 @@ const LandingPage = ({ onLogin, onStartSso }: { onLogin: (username: string, pass
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ssoError = params.get('sso_error');
+    const ssoLoggedOut = params.get('sso_logged_out') || params.get('logged_out');
     if (ssoError) {
       setError(ssoError);
       params.delete('sso_error');
+    }
+    if (ssoLoggedOut) {
+      setNotice('You have been signed out successfully.');
+      params.delete('sso_logged_out');
+      params.delete('logged_out');
+    }
+    if (ssoError || ssoLoggedOut) {
       const newUrl = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
       window.history.replaceState({}, '', newUrl);
     }
@@ -908,6 +918,7 @@ const LandingPage = ({ onLogin, onStartSso }: { onLogin: (username: string, pass
            <div className="max-w-sm mx-auto w-full">
               <h2 className="text-3xl font-semibold text-[#0a4d0a] mb-2">Welcome back</h2>
               <p className="text-slate-500 text-sm mb-6 leading-relaxed">Sign in to manage assets, stock movements, and audit sessions.</p>
+              {notice && <div className="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center gap-2 text-sm text-emerald-700 animate-in slide-in-from-top-2"><CheckCircle2 className="w-4 h-4 shrink-0" />{notice}</div>}
               {error && <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-sm text-red-600 animate-in slide-in-from-top-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
               <form onSubmit={handleLogin} className="space-y-4">
                  <div className="space-y-1.5">
@@ -4700,7 +4711,7 @@ const ConsumablesCatalogView = ({ catalog, setCatalog, categories, onLog, userRo
 };
 
 const App = () => {
-  const [auth, setAuth] = useState<{ token: string, user: { id: string, username: string, role: string } } | null>(null);
+  const [auth, setAuth] = useState<{ token: string, user: { id: string, username: string, role: string, authMethod?: 'sso' | 'local' } } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [view, setView] = useState<ViewState>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -4748,12 +4759,16 @@ const App = () => {
   const [isSavingMR, setIsSavingMR] = useState(false);
   const [isSavingAudit, setIsSavingAudit] = useState(false);
   const userRole = auth?.user.role || 'Officer';
+  const isSsoUser = auth?.user.authMethod === 'sso';
   const [showNotifications, setShowNotifications] = useState(false);
   
   useEffect(() => {
     const saved = localStorage.getItem('auth');
     if (saved) {
       const parsed = JSON.parse(saved);
+      if (parsed?.user && !parsed.user.authMethod) {
+        parsed.user.authMethod = 'local';
+      }
       setAuth(parsed);
       setIsAuthenticated(true);
       setAuthToken(parsed.token);
@@ -4785,7 +4800,7 @@ const App = () => {
         }
       }
       if (user) {
-        const payload = { token: ssoToken, user };
+        const payload = { token: ssoToken, user: { ...user, authMethod: user.authMethod || 'sso' } };
         setAuth(payload);
         setIsAuthenticated(true);
         setAuthToken(ssoToken);
@@ -5012,11 +5027,31 @@ const App = () => {
 
   const handleAuthLogin = async (username: string, password: string) => {
       const result = await login(username, password);
-      setAuth(result);
+      const payload = { ...result, user: { ...result.user, authMethod: result.user?.authMethod || 'local' } };
+      setAuth(payload);
       setIsAuthenticated(true);
-      setAuthToken(result.token);
-      localStorage.setItem('auth', JSON.stringify(result));
+      setAuthToken(payload.token);
+      localStorage.setItem('auth', JSON.stringify(payload));
       setSuccessMessage('Signed in successfully.');
+  };
+
+  const handleLogout = async () => {
+      const ok = await requestConfirm({ title: 'Sign out?', message: 'Are you sure you want to sign out?', confirmLabel: 'Logout', cancelLabel: 'Cancel', variant: 'danger' });
+      if (!ok) return;
+      if (!isSsoUser) {
+          handleAuthSignOut();
+          return;
+      }
+      try {
+          const result = await startLogout();
+          handleAuthSignOut();
+          if (result?.logoutUrl) {
+              window.location.href = result.logoutUrl;
+          }
+      } catch (err: any) {
+          handleAuthSignOut();
+          setDataError(err?.message || 'Failed to sign out from SSO. You have been signed out locally.');
+      }
   };
 
   const handleSyncEmployees = async () => {
@@ -5417,10 +5452,7 @@ const App = () => {
                     </button>
                 )}
                 <button
-                    onClick={async () => {
-                        const ok = await requestConfirm({ title: 'Sign out?', message: 'Are you sure you want to sign out?', confirmLabel: 'Logout', cancelLabel: 'Cancel', variant: 'danger' });
-                        if (ok) handleAuthSignOut();
-                    }}
+                    onClick={handleLogout}
                     className={`flex items-center gap-3 px-4 py-2 w-full text-green-100 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}>
                     <LogOut size={20} />
                     {!isSidebarCollapsed && <span>Sign Out</span>}

@@ -9,6 +9,7 @@ export interface AuthUser {
   id: string;
   username: string;
   role: Role;
+  authMethod?: 'sso' | 'local';
 }
 
 export const signToken = (user: AuthUser) => {

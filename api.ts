@@ -516,6 +516,18 @@ export const login = async (username: string, password: string) => {
   return json;
 };
 
+export const startLogout = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+    method: 'POST',
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Logout failed');
+  }
+  return res.json();
+};
+
 export const getSsoRedirect = async () => {
   const res = await fetch(`${API_BASE_URL}/api/auth/sso/redirect`);
   if (!res.ok) {
