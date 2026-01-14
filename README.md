@@ -3,9 +3,11 @@
 A comprehensive, web-based inventory management prototype designed for the Eastern Samar State University (ESSU) Supply Office. This system digitizes the management of Property, Plant, and Equipment (PPE), consumable supplies, physical audits, and accountability issuance.
 
 ## 🔑 Access / Roles
-Authentication and role-based access are now enabled.
-- Officer: `officer / admin123` (full access)
-- Staff: `staff / staff123` (no delete, limited settings)
+Authentication and role-based access are enabled.
+- Local accounts (seeded): `officer / admin123` and `staff / staff123`
+- HRMS SSO: restricted to **Supply Office** accounts
+  - Supply Officer (or roles containing Officer/Admin) => **Officer**
+  - Other Supply Office staff => **Staff**
 
 ## 🚀 Key Features
 
@@ -41,8 +43,8 @@ Authentication and role-based access are now enabled.
 
 ### 6. Master Data Management (MDM)
 Centralized management for system integrity:
-*   **Employees:** Granular name fields, Department linking.
-*   **Departments:** Head of Office, Location linking.
+*   **Employees:** Synced from HRMS (read-only in-app).
+*   **Departments:** Synced from HRMS (read-only in-app).
 *   **Locations:** Building/Room management.
 *   **Fund Clusters:** Fund source definitions.
 *   **Asset Categories:** Classification for PPE vs. Consumables.
@@ -61,17 +63,22 @@ Dedicated reporting module with export/print capabilities:
 *   **Database Export:** JSON export of current state.
 *   **User Management:** Officer can create/deactivate Staff accounts.
 *   **Success/Confirm UX:** Custom confirmation dialogs and success banners across mutations; logout requires confirmation.
+*   **HRMS Sync:** Officer-triggered sync for Employees and Departments.
+*   **Data Health Check:** Validates common data issues (negative quantities, invalid references).
 
 ---
 
 ## 🛠 Tech Stack
-*   **Framework:** React 19
+*   **Frontend:** Vite + React 19 + TypeScript
 *   **Styling:** Tailwind CSS
 *   **Icons:** Lucide React
-*   **State Management:** Local State (Prototype) / In-Memory Mock Data
+*   **Backend:** Node.js + Express + Prisma
+*   **Database:** MySQL
+*   **Auth:** JWT + OAuth2/OIDC (HRMS SSO)
+*   **Hosting:** Railway (API + MySQL), Vercel (frontend)
 
 ## 🗄️ Backend (MySQL + Express/Prisma)
-A backend lives in `server/` using Express, Prisma ORM, and MySQL. Authentication uses JWT; mutating routes require a valid token, and some routes are Officer-only.
+The backend lives in `server/` using Express, Prisma ORM, and MySQL. Authentication uses JWT and supports HRMS SSO (OAuth2/OIDC); mutating routes require a valid token, and some routes are Officer-only.
 
 ### Requirements
 - Node.js 18+
@@ -88,7 +95,19 @@ npm run seed           # loads the mock data from the existing frontend constant
 npm run dev            # starts API on http://localhost:4000
 ```
 
-### Available endpoints (initial)
+### Environment variables (backend)
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `OAUTH_PROVIDER_URL` (HRMS base URL)
+- `OAUTH_CLIENT_ID`
+- `OAUTH_CLIENT_SECRET`
+- `OAUTH_REDIRECT_URI`
+- `OAUTH_SCOPES` (default: `openid profile email`)
+- `FRONTEND_BASE_URL` (used for SSO redirects and logout return)
+- `HRMS_API_BASE_URL` (optional override)
+- `HRMS_SERVICE_TOKEN` (optional; service token for sync without user SSO)
+
+### Available endpoints (selected)
 - `GET /health`
 - `GET /api/departments`
 - `GET /api/locations`
@@ -110,6 +129,13 @@ npm run dev            # starts API on http://localhost:4000
 - `POST /api/logs` (create)
 - `GET /api/settings`, `PUT /api/settings` (Officer)
 - `GET /api/users`, `POST /api/users`, `PUT /api/users/:id` (Officer)
+- `GET /api/auth/sso/redirect`
+- `GET /api/auth/sso/callback` (redirects to frontend)
+- `POST /api/auth/logout` (SSO end-session redirect)
+- `POST /api/hrms/employees/sync` (Officer)
+- `POST /api/hrms/departments/sync` (Officer)
+- `POST /api/maintenance/export` (Officer)
+- `POST /api/maintenance/health` (Officer)
 
 > Note: The frontend now uses the API by default (token-based). If auth fails, it falls back to mock data and shows a warning. Ensure `VITE_API_BASE_URL` is set and the backend is running.
 
@@ -123,6 +149,10 @@ npm run dev        # start Vite dev server (http://localhost:3000)
 npm run build      # production build
 npm run preview    # preview production build locally
 ```
+
+## 🚀 Deployment Notes (Railway + Vercel)
+- **Railway (API + MySQL):** set `DATABASE_URL`, `JWT_SECRET`, and all SSO variables. Deploy `server/` as the root.
+- **Vercel (Frontend):** set `VITE_API_BASE_URL` to your Railway API URL.
 
 ## 📂 Project Structure
 *   `App.tsx`: Main application controller, routing, and all view components.
