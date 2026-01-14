@@ -409,6 +409,23 @@ export const updateDepartment = async (id: string, payload: Partial<Department>)
 export const deactivateDepartment = async (id: string) =>
   normalizeDepartment(await delJson(`/api/departments/${id}`));
 
+export const getDepartments = async () => {
+  const departments = await fetchJson<any[]>('/api/departments');
+  return departments.map(normalizeDepartment);
+};
+
+export const syncDepartmentsFromHrms = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/hrms/departments/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Failed to sync departments from HRMS');
+  }
+  return res.json();
+};
+
 // Locations
 export const createLocation = async (payload: Partial<Location>) =>
   normalizeLocation(await postJson('/api/locations', { ...payload, status: toPayloadStatus((payload as any).status) }));

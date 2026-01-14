@@ -24,6 +24,8 @@ import {
   createDepartment,
   updateDepartment,
   deactivateDepartment,
+  getDepartments,
+  syncDepartmentsFromHrms,
   createLocation,
   updateLocation,
   deactivateLocation,
@@ -575,7 +577,7 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
 };
 
 // --- Settings Module ---
-const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, users = [], onCreateUser, onUpdateUser, onSyncEmployees, onAuthError }: any) => {
+const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, users = [], onCreateUser, onUpdateUser, onSyncEmployees, onSyncDepartments, onAuthError }: any) => {
     const confirm = useContext(ConfirmContext);
     const success = useContext(SuccessContext);
     const handleChange = (section: string, field: string, value: any) => {
@@ -684,6 +686,12 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                                 {settings.integrations?.lastEmployeeSyncAt ? formatDateTime(settings.integrations.lastEmployeeSyncAt) : 'Never'}
                             </span>
                         </div>
+                        <div className="text-xs text-slate-500">
+                            Last department sync:{' '}
+                            <span className="font-medium text-slate-700">
+                                {settings.integrations?.lastDepartmentSyncAt ? formatDateTime(settings.integrations.lastDepartmentSyncAt) : 'Never'}
+                            </span>
+                        </div>
                     </div>
                     <div className="flex gap-4 flex-wrap">
                         <button
@@ -739,6 +747,39 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                                 }}
                             >
                                 <RefreshCw size={16} /> Sync Employees
+                            </button>
+                        )}
+                        {userRole === 'Officer' && (
+                            <button
+                                className="flex-1 px-4 py-2 border border-teal-200 bg-teal-50 rounded-lg flex items-center justify-center gap-2 hover:bg-teal-100 text-teal-700"
+                                onClick={async () => {
+                                    const ok = await confirm({
+                                        title: 'Sync departments from HRMS?',
+                                        message: 'This will pull the latest departments list from HRMS and update the local database.',
+                                        confirmLabel: 'Sync now',
+                                        cancelLabel: 'Cancel',
+                                        variant: 'info',
+                                    });
+                                    if (!ok) return;
+                                    try {
+                                        const result = await onSyncDepartments?.();
+                                        const summary = result
+                                            ? `Processed ${result.processed} departments (${result.inserted} new, ${result.updated} updated, ${result.inactivated} inactivated).`
+                                            : 'Department sync completed.';
+                                        success(summary);
+                                        if (onLog) onLog('Synced Departments', 'HRMS', summary);
+                                    } catch (err: any) {
+                                        await confirm({
+                                            title: 'Sync failed',
+                                            message: err?.message || 'Failed to sync departments.',
+                                            confirmLabel: 'Close',
+                                            hideCancel: true,
+                                            variant: 'info',
+                                        });
+                                    }
+                                }}
+                            >
+                                <RefreshCw size={16} /> Sync Departments
                             </button>
                         )}
                         <button
@@ -3218,8 +3259,13 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const isReadOnly = true;
 
     const handleEdit = (dept: Department) => {
+        if (isReadOnly) {
+            confirm({ title: 'Read-only', message: 'Departments are synced from HRMS and cannot be edited here.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
         setEditingDept(dept);
         setFormData({
             code: dept.code,
@@ -3233,6 +3279,10 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
     };
 
     const handleAdd = () => {
+        if (isReadOnly) {
+            confirm({ title: 'Read-only', message: 'Departments are synced from HRMS and cannot be added manually.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            return;
+        }
         setEditingDept(null);
         setFormData({ code: '', name: '', head: '', locationId: '', status: 'Active' });
         setError('');
@@ -3301,9 +3351,11 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-slate-800">Departments</h1>
-                <button onClick={handleAdd} className="px-4 py-2 bg-[#006400] text-white rounded-lg flex gap-2 items-center hover:bg-[#004d00]">
-                    <Plus size={16}/> Add Department
-                </button>
+                <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#006400] bg-green-50 border border-green-100 rounded-full">Synced from HRMS</span>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-100 text-blue-700 text-sm px-4 py-3 rounded-lg">
+                Departments are synced from HRMS and are read-only in this module.
             </div>
 
             <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -3347,10 +3399,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
                                 <td className="px-6 py-3 text-slate-600">{locations.find((l:any) => l.id === d.locationId)?.name || '-'}</td>
                                 <td className="px-6 py-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${d.status === 'Active' ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-500'}`}>{d.status}</span></td>
                                 <td className="px-6 py-3 text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button onClick={() => handleEdit(d)} className="p-1.5 text-slate-500 hover:text-[#006400] hover:bg-green-50 rounded"><Pencil size={16} /></button>
-                                        {userRole === 'Officer' && <button onClick={() => handleDelete(d.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
-                                    </div>
+                                    <span className="text-xs text-slate-400 font-medium">Managed by HRMS</span>
                                 </td>
                             </tr>
                         ))}
@@ -4993,6 +5042,29 @@ const App = () => {
       return result;
   };
 
+  const handleSyncDepartments = async () => {
+      const result = await syncDepartmentsFromHrms();
+      const refreshed = await getDepartments();
+      setDepartments(refreshed);
+      if (result?.lastSyncAt) {
+          setSettings((prev: any) => ({
+              ...prev,
+              integrations: {
+                  ...(prev.integrations || {}),
+                  lastDepartmentSyncAt: result.lastSyncAt,
+              },
+          }));
+          setLastSavedSettings((prev: any) => ({
+              ...prev,
+              integrations: {
+                  ...(prev.integrations || {}),
+                  lastDepartmentSyncAt: result.lastSyncAt,
+              },
+          }));
+      }
+      return result;
+  };
+
   const handleStartSso = async () => {
       const { url } = await getSsoRedirect();
       window.location.href = url;
@@ -5139,6 +5211,7 @@ const App = () => {
                       setSuccessMessage('User updated successfully.');
                   }}
                   onSyncEmployees={handleSyncEmployees}
+                  onSyncDepartments={handleSyncDepartments}
                   onLog={handleLog} 
               />;
           

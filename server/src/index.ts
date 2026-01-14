@@ -46,6 +46,15 @@ const getHrmsToken = (userId: string) => {
   return entry.accessToken;
 };
 
+const updateIntegrations = async (payload: Record<string, any>) => {
+  const settings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+  const existing = (settings?.integrations as any) || {};
+  await prisma.systemSettings.update({
+    where: { id: 1 },
+    data: { integrations: { ...existing, ...payload } },
+  });
+};
+
 const generateState = () => jwt.sign({ nonce: randomUUID() }, STATE_SECRET, { expiresIn: '10m' });
 const verifyState = (token: string) => {
   try {
@@ -228,47 +237,15 @@ app.get('/api/departments', asyncHandler(async (_req, res) => {
 }));
 
 app.post('/api/departments', asyncHandler(async (req, res) => {
-  const { code, name, head, locationId, status = 'Active' } = req.body || {};
-  if (!code || !name || !locationId) {
-    return res.status(400).json({ message: 'Code, name, and locationId are required.' });
-  }
-  const existing = await prisma.department.findFirst({ where: { code } });
-  if (existing) return res.status(400).json({ message: 'Department code must be unique.' });
-  const created = await prisma.department.create({
-    data: { code, name, head: head || null, locationId, status },
-  });
-  res.status(201).json(created);
+  res.status(403).json({ message: 'Departments are managed via HRMS sync. Manual creation is disabled.' });
 }));
 
 app.put('/api/departments/:id', asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { code, name, head, locationId, status } = req.body || {};
-  const dept = await prisma.department.findUnique({ where: { id } });
-  if (!dept) return res.status(404).json({ message: 'Department not found.' });
-  if (code) {
-    const dup = await prisma.department.findFirst({ where: { code, NOT: { id } } });
-    if (dup) return res.status(400).json({ message: 'Department code must be unique.' });
-  }
-  const updated = await prisma.department.update({
-    where: { id },
-    data: {
-      code: code ?? dept.code,
-      name: name ?? dept.name,
-      head: head === undefined ? dept.head : head || null,
-      locationId: locationId ?? dept.locationId,
-      status: status ?? dept.status,
-    },
-  });
-  res.json(updated);
+  res.status(403).json({ message: 'Departments are managed via HRMS sync. Manual updates are disabled.' });
 }));
 
 app.delete('/api/departments/:id', asyncHandler(async (req, res) => {
-  if (!ensureRole(req, res, ['Officer'])) return;
-  const { id } = req.params;
-  const dept = await prisma.department.findUnique({ where: { id } });
-  if (!dept) return res.status(404).json({ message: 'Department not found.' });
-  const updated = await prisma.department.update({ where: { id }, data: { status: 'Inactive' } });
-  res.json(updated);
+  res.status(403).json({ message: 'Departments are managed via HRMS sync. Manual deactivation is disabled.' });
 }));
 
 app.get('/api/locations', asyncHandler(async (_req, res) => {
@@ -559,16 +536,13 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
     }
 
     currentPage += 1;
-    if (currentPage <= lastPage) {
+  if (currentPage <= lastPage) {
       await sleep(1000);
     }
   }
 
   const lastSyncAt = new Date().toISOString();
-  await prisma.systemSettings.update({
-    where: { id: 1 },
-    data: { integrations: { lastEmployeeSyncAt: lastSyncAt } },
-  });
+  await updateIntegrations({ lastEmployeeSyncAt: lastSyncAt });
 
   res.json({
     processed,
@@ -577,6 +551,121 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
     inactivated,
     skipped,
     pages: lastPage,
+    lastSyncAt,
+  });
+}));
+
+app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const authUser = (req as any).user as { id: string } | undefined;
+  if (!HRMS_API_BASE_URL) {
+    return res.status(500).json({ message: 'HRMS API base URL is not configured.' });
+  }
+
+  const accessToken = (authUser?.id ? getHrmsToken(authUser.id) : null) || process.env.HRMS_SERVICE_TOKEN;
+  if (!accessToken) {
+    return res.status(400).json({ message: 'No HRMS access token available. Please sign in via SSO first.' });
+  }
+
+  const url = new URL(`${HRMS_API_BASE_URL.replace(/\/$/, '')}/api/departments`);
+  url.searchParams.set('include_deleted', 'true');
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    return res.status(502).json({ message: text || 'HRMS department request failed.' });
+  }
+
+  const payload = await response.json();
+  const data = payload?.data || payload || [];
+
+  const existing = await prisma.department.findMany({ select: { id: true, code: true, name: true } });
+  const byCode = new Map(existing.map((d) => [d.code.toLowerCase(), d]));
+  const byName = new Map(existing.map((d) => [d.name.toLowerCase(), d]));
+
+  const toDeptCode = (value: string) => {
+    const base = value.toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 8) || 'DEPT';
+    let candidate = base;
+    let idx = 1;
+    while (byCode.has(candidate.toLowerCase())) {
+      candidate = `${base}${idx}`;
+      idx += 1;
+    }
+    return candidate;
+  };
+
+  const isInactive = (dept: any) =>
+    Boolean(dept?.is_deleted) ||
+    Boolean(dept?.deleted_at) ||
+    String(dept?.status || '').toLowerCase() === 'inactive';
+
+  let inserted = 0;
+  let updated = 0;
+  let inactivated = 0;
+  let processed = 0;
+  let skipped = 0;
+
+  for (const dept of data) {
+    const name = String(dept?.name || '').trim();
+    if (!name) {
+      skipped += 1;
+      continue;
+    }
+    const code = String(dept?.code || '').trim() || toDeptCode(name);
+    const status = isInactive(dept) ? 'Inactive' : 'Active';
+    const description = dept?.description || null;
+
+    const existingByCode = byCode.get(code.toLowerCase());
+    const existingByName = byName.get(name.toLowerCase());
+    const target = existingByCode || existingByName;
+
+    if (target) {
+      const newCode = existingByCode ? code : target.code;
+      const updatedDept = await prisma.department.update({
+        where: { id: target.id },
+        data: {
+          code: newCode,
+          name,
+          description,
+          status,
+        },
+      });
+      byCode.set(updatedDept.code.toLowerCase(), updatedDept);
+      byName.set(updatedDept.name.toLowerCase(), updatedDept);
+      updated += 1;
+    } else {
+      const created = await prisma.department.create({
+        data: {
+          code,
+          name,
+          description,
+          status,
+        },
+      });
+      byCode.set(created.code.toLowerCase(), created);
+      byName.set(created.name.toLowerCase(), created);
+      inserted += 1;
+    }
+
+    processed += 1;
+    if (status === 'Inactive') inactivated += 1;
+  }
+
+  const lastSyncAt = new Date().toISOString();
+  await updateIntegrations({ lastDepartmentSyncAt: lastSyncAt });
+
+  res.json({
+    processed,
+    inserted,
+    updated,
+    inactivated,
+    skipped,
     lastSyncAt,
   });
 }));

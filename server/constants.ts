@@ -391,7 +391,8 @@ export const INITIAL_SETTINGS: SystemSettings = {
     alertType: 'Toast'
   },
   integrations: {
-    lastEmployeeSyncAt: null
+    lastEmployeeSyncAt: null,
+    lastDepartmentSyncAt: null
   }
 };
 

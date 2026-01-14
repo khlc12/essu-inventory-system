@@ -286,6 +286,7 @@ export interface SystemSettings {
   };
   integrations?: {
     lastEmployeeSyncAt?: string | null;
+    lastDepartmentSyncAt?: string | null;
   };
 }
 
