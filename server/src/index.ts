@@ -619,8 +619,6 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
     }
     const code = String(dept?.code || '').trim() || toDeptCode(name);
     const status = isInactive(dept) ? 'Inactive' : 'Active';
-    const description = dept?.description || null;
-
     const existingByCode = byCode.get(code.toLowerCase());
     const existingByName = byName.get(name.toLowerCase());
     const target = existingByCode || existingByName;
@@ -632,7 +630,6 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
         data: {
           code: newCode,
           name,
-          description,
           status,
         },
       });
@@ -644,7 +641,6 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
         data: {
           code,
           name,
-          description,
           status,
         },
       });
