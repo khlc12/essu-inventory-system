@@ -865,6 +865,12 @@ const LandingPage = ({ onLogin, onStartSso }: { onLogin: (username: string, pass
     }
   }, []);
 
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(''), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -5464,7 +5470,7 @@ const App = () => {
              <header className="min-h-[64px] bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 px-4 md:px-6 shrink-0 z-10 print:hidden">
                 <div className="flex items-center gap-3">
                     <img src="/essu-seal.png" alt="ESSU Seal" className="w-10 h-10 rounded-full border border-slate-200 shadow-sm object-cover bg-white" />
-                    <h2 className="text-lg font-bold text-slate-700">Supply Office Management System</h2>
+                    <h2 className="text-lg font-bold text-slate-700">Supply Office PPE &amp; Consumables Management System</h2>
                 </div>
                 <div className="flex items-center gap-4 relative">
                     <button onClick={() => setShowNotifications((v) => !v)} className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
