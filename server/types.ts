@@ -284,6 +284,9 @@ export interface SystemSettings {
     enableInactivityWarning: boolean;
     alertType: 'Toast' | 'Badge' | 'Modal';
   };
+  integrations?: {
+    lastEmployeeSyncAt?: string | null;
+  };
 }
 
 // --- Notification Types ---

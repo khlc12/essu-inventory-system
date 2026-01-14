@@ -389,6 +389,9 @@ export const INITIAL_SETTINGS: SystemSettings = {
     enableLowStockAlerts: true,
     enableInactivityWarning: false,
     alertType: 'Toast'
+  },
+  integrations: {
+    lastEmployeeSyncAt: null
   }
 };
 

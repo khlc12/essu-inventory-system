@@ -20,9 +20,31 @@ const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || '';
 const OAUTH_SCOPES = process.env.OAUTH_SCOPES || 'openid profile email';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.VITE_APP_URL || 'http://localhost:3000';
 const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'state-secret';
-const ALLOWED_DEPARTMENTS = (process.env.SSO_ALLOWED_DEPARTMENTS || '').split(',').map((s) => s.trim()).filter(Boolean).map((s) => s.toLowerCase());
-const ALLOWED_ROLES = (process.env.SSO_ALLOWED_ROLES || '').split(',').map((s) => s.trim()).filter(Boolean).map((s) => s.toLowerCase());
-const ALLOWED_EMAIL_DOMAIN = (process.env.SSO_ALLOWED_EMAIL_DOMAIN || '').trim().toLowerCase();
+const HRMS_API_BASE_URL = process.env.HRMS_API_BASE_URL || OAUTH_PROVIDER_URL;
+
+type HrmsTokenInfo = {
+  accessToken: string;
+  expiresAt?: number;
+};
+
+const hrmsTokenStore = new Map<string, HrmsTokenInfo>();
+
+const storeHrmsToken = (userId: string, tokenJson: any) => {
+  if (!tokenJson?.access_token) return;
+  const expiresIn = Number(tokenJson.expires_in || 0);
+  const expiresAt = expiresIn ? Date.now() + expiresIn * 1000 : undefined;
+  hrmsTokenStore.set(userId, { accessToken: tokenJson.access_token, expiresAt });
+};
+
+const getHrmsToken = (userId: string) => {
+  const entry = hrmsTokenStore.get(userId);
+  if (!entry) return null;
+  if (entry.expiresAt && Date.now() > entry.expiresAt) {
+    hrmsTokenStore.delete(userId);
+    return null;
+  }
+  return entry.accessToken;
+};
 
 const generateState = () => jwt.sign({ nonce: randomUUID() }, STATE_SECRET, { expiresIn: '10m' });
 const verifyState = (token: string) => {
@@ -174,6 +196,7 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
     update: { role, status: 'Active' },
     create: { username, passwordHash, role, status: 'Active' },
   });
+  storeHrmsToken(user.id, tokenJson);
 
   const token = signToken({ id: user.id, username: user.username, role: user.role as any });
   const userPayload = { id: user.id, username: user.username, role: user.role };
@@ -390,57 +413,172 @@ app.get('/api/employees', asyncHandler(async (_req, res) => {
 }));
 
 app.post('/api/employees', asyncHandler(async (req, res) => {
-  const { employeeId, firstName, middleName, lastName, position, departmentId, status = 'Active' } = req.body || {};
-  if (!employeeId || !firstName || !lastName || !departmentId) {
-    return res.status(400).json({ message: 'Employee ID, first name, last name, and departmentId are required.' });
-  }
-  const dup = await prisma.employee.findFirst({ where: { employeeId } });
-  if (dup) return res.status(400).json({ message: 'Employee ID must be unique.' });
-  const created = await prisma.employee.create({
-    data: {
-      employeeId,
-      firstName,
-      middleName: middleName || null,
-      lastName,
-      position: position || null,
-      departmentId,
-      status,
-    },
-  });
-  res.status(201).json(created);
+  res.status(403).json({ message: 'Employees are managed via HRMS sync. Manual creation is disabled.' });
 }));
 
 app.put('/api/employees/:id', asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { employeeId, firstName, middleName, lastName, position, departmentId, status } = req.body || {};
-  const emp = await prisma.employee.findUnique({ where: { id } });
-  if (!emp) return res.status(404).json({ message: 'Employee not found.' });
-  if (employeeId) {
-    const dup = await prisma.employee.findFirst({ where: { employeeId, NOT: { id } } });
-    if (dup) return res.status(400).json({ message: 'Employee ID must be unique.' });
-  }
-  const updated = await prisma.employee.update({
-    where: { id },
-    data: {
-      employeeId: employeeId ?? emp.employeeId,
-      firstName: firstName ?? emp.firstName,
-      middleName: middleName === undefined ? emp.middleName : middleName || null,
-      lastName: lastName ?? emp.lastName,
-      position: position === undefined ? emp.position : position || null,
-      departmentId: departmentId ?? emp.departmentId,
-      status: status ?? emp.status,
-    },
-  });
-  res.json(updated);
+  res.status(403).json({ message: 'Employees are managed via HRMS sync. Manual updates are disabled.' });
 }));
 
 app.delete('/api/employees/:id', asyncHandler(async (req, res) => {
+  res.status(403).json({ message: 'Employees are managed via HRMS sync. Manual deactivation is disabled.' });
+}));
+
+app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
   if (!ensureRole(req, res, ['Officer'])) return;
-  const { id } = req.params;
-  const emp = await prisma.employee.findUnique({ where: { id } });
-  if (!emp) return res.status(404).json({ message: 'Employee not found.' });
-  const updated = await prisma.employee.update({ where: { id }, data: { status: 'Inactive' } });
-  res.json(updated);
+  const authUser = (req as any).user as { id: string } | undefined;
+  if (!HRMS_API_BASE_URL) {
+    return res.status(500).json({ message: 'HRMS API base URL is not configured.' });
+  }
+
+  const accessToken = (authUser?.id ? getHrmsToken(authUser.id) : null) || process.env.HRMS_SERVICE_TOKEN;
+  if (!accessToken) {
+    return res.status(400).json({ message: 'No HRMS access token available. Please sign in via SSO first.' });
+  }
+
+  const existingEmployees = await prisma.employee.findMany({ select: { employeeId: true } });
+  const existingById = new Set(existingEmployees.map((e) => e.employeeId));
+
+  const departments = await prisma.department.findMany({ select: { id: true, code: true, name: true } });
+  const deptByCode = new Map(departments.map((d) => [d.code.toLowerCase(), d]));
+  const deptByName = new Map(departments.map((d) => [d.name.toLowerCase(), d]));
+
+  const toDeptCode = (value: string) => {
+    const base = value.toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 8) || 'DEPT';
+    let candidate = base;
+    let idx = 1;
+    while (deptByCode.has(candidate.toLowerCase())) {
+      candidate = `${base}${idx}`;
+      idx += 1;
+    }
+    return candidate;
+  };
+
+  const ensureDepartment = async (hrDept: any) => {
+    const code = String(hrDept?.code || '').trim();
+    const name = String(hrDept?.name || '').trim();
+    const codeKey = code.toLowerCase();
+    const nameKey = name.toLowerCase();
+
+    if (codeKey && deptByCode.has(codeKey)) return deptByCode.get(codeKey);
+    if (nameKey && deptByName.has(nameKey)) return deptByName.get(nameKey);
+
+    const resolvedName = name || code || 'Unassigned Department';
+    const resolvedCode = code || toDeptCode(resolvedName);
+    const created = await prisma.department.create({
+      data: { code: resolvedCode, name: resolvedName, status: 'Active' },
+    });
+    deptByCode.set(created.code.toLowerCase(), created);
+    deptByName.set(created.name.toLowerCase(), created);
+    return created;
+  };
+
+  const toEmployeeId = (emp: any) =>
+    String(emp?.employee_number || emp?.employee_id || emp?.id || emp?.contact?.email || '').trim();
+
+  const isInactive = (emp: any) =>
+    Boolean(emp?.is_deleted) ||
+    Boolean(emp?.deleted_at) ||
+    String(emp?.employment?.status || '').toLowerCase() === 'inactive';
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  let inserted = 0;
+  let updated = 0;
+  let inactivated = 0;
+  let skipped = 0;
+  let processed = 0;
+  let currentPage = 1;
+  let lastPage = 1;
+  const perPage = 100;
+
+  while (currentPage <= lastPage) {
+    const url = new URL(`${HRMS_API_BASE_URL.replace(/\/$/, '')}/api/employees`);
+    url.searchParams.set('include_deleted', 'true');
+    url.searchParams.set('status', 'all');
+    url.searchParams.set('page', String(currentPage));
+    url.searchParams.set('per_page', String(perPage));
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(502).json({ message: text || `HRMS request failed on page ${currentPage}.` });
+    }
+    const payload = await response.json();
+    const data = payload?.data || [];
+    const meta = payload?.meta || {};
+    lastPage = Number(meta.last_page || 1);
+
+    for (const emp of data) {
+      const employeeId = toEmployeeId(emp);
+      if (!employeeId) {
+        skipped += 1;
+        continue;
+      }
+      const dept = await ensureDepartment(emp.department);
+      if (!dept) {
+        skipped += 1;
+        continue;
+      }
+
+      const status = isInactive(emp) ? 'Inactive' : 'Active';
+      const exists = existingById.has(employeeId);
+      await prisma.employee.upsert({
+        where: { employeeId },
+        update: {
+          firstName: emp?.name?.first_name || emp?.first_name || '',
+          middleName: emp?.name?.middle_name || emp?.middle_name || null,
+          lastName: emp?.name?.surname || emp?.last_name || '',
+          position: emp?.position?.name || emp?.position || null,
+          departmentId: dept.id,
+          status,
+        },
+        create: {
+          employeeId,
+          firstName: emp?.name?.first_name || emp?.first_name || 'Unknown',
+          middleName: emp?.name?.middle_name || emp?.middle_name || null,
+          lastName: emp?.name?.surname || emp?.last_name || 'Unknown',
+          position: emp?.position?.name || emp?.position || null,
+          departmentId: dept.id,
+          status,
+        },
+      });
+
+      processed += 1;
+      if (status === 'Inactive') inactivated += 1;
+      if (exists) updated += 1;
+      else {
+        inserted += 1;
+        existingById.add(employeeId);
+      }
+    }
+
+    currentPage += 1;
+    if (currentPage <= lastPage) {
+      await sleep(1000);
+    }
+  }
+
+  const lastSyncAt = new Date().toISOString();
+  await prisma.systemSettings.update({
+    where: { id: 1 },
+    data: { integrations: { lastEmployeeSyncAt: lastSyncAt } },
+  });
+
+  res.json({
+    processed,
+    inserted,
+    updated,
+    inactivated,
+    skipped,
+    pages: lastPage,
+    lastSyncAt,
+  });
 }));
 
 app.get('/api/catalog', asyncHandler(async (_req, res) => {
@@ -775,7 +913,7 @@ app.get('/api/settings', asyncHandler(async (_req, res) => {
 
 app.put('/api/settings', authMiddleware, asyncHandler(async (req, res) => {
   if (!ensureRole(req, res, ['Officer'])) return;
-  const { general, inventory, documents, notifications } = req.body || {};
+  const { general, inventory, documents, notifications, integrations } = req.body || {};
   const updated = await prisma.systemSettings.update({
     where: { id: 1 },
     data: {
@@ -783,6 +921,7 @@ app.put('/api/settings', authMiddleware, asyncHandler(async (req, res) => {
       inventory,
       documents,
       notifications,
+      integrations,
     },
   });
   res.json(updated);

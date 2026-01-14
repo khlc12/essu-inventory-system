@@ -459,6 +459,23 @@ export const updateEmployee = async (id: string, payload: Partial<Employee>) =>
 export const deactivateEmployee = async (id: string) =>
   normalizeEmployee(await delJson(`/api/employees/${id}`));
 
+export const getEmployees = async () => {
+  const employees = await fetchJson<any[]>('/api/employees');
+  return employees.map(normalizeEmployee);
+};
+
+export const syncEmployeesFromHrms = async () => {
+  const res = await fetch(`${API_BASE_URL}/api/hrms/employees/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Failed to sync employees from HRMS');
+  }
+  return res.json();
+};
+
 export const login = async (username: string, password: string) => {
   const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
