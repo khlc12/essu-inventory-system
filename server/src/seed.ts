@@ -344,6 +344,7 @@ async function main() {
       inventory: INITIAL_SETTINGS.inventory,
       documents: INITIAL_SETTINGS.documents,
       notifications: INITIAL_SETTINGS.notifications,
+      integrations: INITIAL_SETTINGS.integrations,
     },
   });
 

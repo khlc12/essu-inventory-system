@@ -302,5 +302,6 @@ model SystemSettings {
   inventory     Json
   documents     Json
   notifications Json
+  integrations  Json?
   updatedAt     DateTime @updatedAt
 }
