@@ -289,6 +289,11 @@ const StockMovementChart = ({ transactions, departments }: { transactions: Trans
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedDept, setSelectedDept] = useState('All');
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
+  const activeDepartments = useMemo(() => departments.filter((d) => d.status === 'Active'), [departments]);
+  const selectedInactiveDept = useMemo(() => {
+    if (selectedDept === 'All') return null;
+    return departments.find((d) => d.id === selectedDept && d.status !== 'Active') || null;
+  }, [departments, selectedDept]);
 
   const availableYears = useMemo(() => {
     const years = new Set(transactions.map(t => new Date(t.date).getFullYear()));
@@ -323,7 +328,10 @@ const StockMovementChart = ({ transactions, departments }: { transactions: Trans
              </select>
              <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-[#006400] max-w-[120px]">
                 <option value="All">All Depts</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.code}</option>)}
+                {selectedInactiveDept && (
+                  <option value={selectedInactiveDept.id}>{selectedInactiveDept.code} (Inactive)</option>
+                )}
+                {activeDepartments.map(d => <option key={d.id} value={d.id}>{d.code}</option>)}
              </select>
           </div>
           <div className="flex bg-slate-100 rounded p-0.5 w-fit">
@@ -1102,6 +1110,11 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
     const [filterLoc, setFilterLoc] = useState('All');
     const [filterYear, setFilterYear] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
+    const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
+    const selectedInactiveDept = useMemo(() => {
+        if (filterDept === 'All') return null;
+        return departments.find((d: Department) => d.id === filterDept && d.status !== 'Active') || null;
+    }, [departments, filterDept]);
 
     const availableYears = useMemo(() => {
         const years = new Set(assets.map((a: Asset) => new Date(a.dateAcquired).getFullYear()));
@@ -1175,7 +1188,10 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
                 </select>
                 <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
                     <option value="All">All Departments</option>
-                    {departments.map((d: Department) => (
+                    {selectedInactiveDept && (
+                        <option value={selectedInactiveDept.id}>{selectedInactiveDept.code} (Inactive)</option>
+                    )}
+                    {activeDepartments.map((d: Department) => (
                         <option key={d.id} value={d.id}>
                             {d.code}
                         </option>
@@ -1301,6 +1317,11 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
         status: 'Active'
     });
     const [error, setError] = useState('');
+    const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
+    const selectedInactiveDept = useMemo(() => {
+        if (!formData.departmentId) return null;
+        return departments.find((d: Department) => d.id === formData.departmentId && d.status !== 'Active') || null;
+    }, [departments, formData.departmentId]);
 
     useEffect(() => {
         if (initialData) {
@@ -1449,7 +1470,10 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                             onChange={e => setFormData({...formData, departmentId: e.target.value})}
                          >
                              <option value="">Select Department...</option>
-                             {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                             {selectedInactiveDept && (
+                                 <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
+                             )}
+                             {activeDepartments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
                          </select>
                     </div>
                     <div>
@@ -1589,6 +1613,11 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [page, setPage] = useState(1);
     const pageSize = 25;
+    const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
+    const selectedInactiveDept = useMemo(() => {
+        if (filterDept === 'All') return null;
+        return departments.find((d: Department) => d.id === filterDept && d.status !== 'Active') || null;
+    }, [departments, filterDept]);
 
     const filtered = useMemo(() => {
         const term = search.toLowerCase();
@@ -1646,7 +1675,10 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
             </select>
             <select value={filterDept} onChange={(e) => { setFilterDept(e.target.value); resetPagination(); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[200px]">
                 <option value="All">All Departments</option>
-                {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {selectedInactiveDept && (
+                    <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
+                )}
+                {activeDepartments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             <div className="flex gap-2 items-center text-sm text-slate-600 flex-wrap">
                 <div className="flex gap-2 items-center">
@@ -1770,6 +1802,11 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
     const [remarks, setRemarks] = useState<string>('');
     const [lineItems, setLineItems] = useState<any[]>([]);
     const [error, setError] = useState<string>('');
+    const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
+    const selectedInactiveDept = useMemo(() => {
+        if (!departmentId) return null;
+        return departments.find((d: Department) => d.id === departmentId && d.status !== 'Active') || null;
+    }, [departments, departmentId]);
 
     const addItem = () => {
         setLineItems([...lineItems, { id: Date.now(), catalogItemId: '', quantity: 1, remarks: '' }]);
@@ -1846,7 +1883,10 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
                     <label className="block text-sm font-medium text-slate-700 mb-1">Department / Destination</label>
                     <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
                         <option value="">Select Department...</option>
-                        {departments.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        {selectedInactiveDept && (
+                            <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
+                        )}
+                        {activeDepartments.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                 </div>
              ) : (
@@ -2578,6 +2618,11 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
     const [selectedLoc, setSelectedLoc] = useState('');
     const [selectedDept, setSelectedDept] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
+    const selectedInactiveDept = useMemo(() => {
+        if (!selectedDept) return null;
+        return departments.find((d: Department) => d.id === selectedDept && d.status !== 'Active') || null;
+    }, [departments, selectedDept]);
 
     const handleStart = async () => {
         if (!description || (!selectedLoc && !selectedDept)) {
@@ -2683,7 +2728,10 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
                             onChange={e => setSelectedDept(e.target.value)}
                         >
                             <option value="">All Departments</option>
-                            {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            {selectedInactiveDept && (
+                                <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
+                            )}
+                            {activeDepartments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
                     </div>
                 </div>
@@ -3008,6 +3056,15 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
     const [error, setError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const isReadOnly = true;
+    const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
+    const selectedInactiveDept = useMemo(() => {
+        if (filterDept === 'All') return null;
+        return departments.find((d: Department) => d.id === filterDept && d.status !== 'Active') || null;
+    }, [departments, filterDept]);
+    const selectedInactiveDeptForForm = useMemo(() => {
+        if (!formData.departmentId) return null;
+        return departments.find((d: Department) => d.id === formData.departmentId && d.status !== 'Active') || null;
+    }, [departments, formData.departmentId]);
 
     const handleEdit = (emp: Employee) => {
         if (isReadOnly) {
@@ -3124,7 +3181,10 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                     onChange={(e) => setFilterDept(e.target.value)}
                 >
                     <option value="All">All Departments</option>
-                    {departments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    {selectedInactiveDept && (
+                        <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
+                    )}
+                    {activeDepartments.map((d: Department) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
                 <button onClick={() => setShowInactive(!showInactive)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showInactive ? 'bg-green-100 text-[#006400]' : 'bg-slate-100 text-slate-600'}`}>
                     {showInactive ? <CheckCircle2 size={16} /> : <Ban size={16} />}
@@ -3197,7 +3257,10 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                                         onChange={e => setFormData({...formData, departmentId: e.target.value})}
                                     >
                                         <option value="">Select Department...</option>
-                                        {departments.filter((d: Department) => d.status === 'Active').map((d: Department) => (
+                                        {selectedInactiveDeptForForm && (
+                                            <option value={selectedInactiveDeptForForm.id}>{selectedInactiveDeptForForm.name} (Inactive)</option>
+                                        )}
+                                        {activeDepartments.map((d: Department) => (
                                             <option key={d.id} value={d.id}>{d.name}</option>
                                         ))}
                                     </select>
