@@ -1322,6 +1322,11 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
         if (!formData.departmentId) return null;
         return departments.find((d: Department) => d.id === formData.departmentId && d.status !== 'Active') || null;
     }, [departments, formData.departmentId]);
+    const activeEmployees = useMemo(() => employees.filter((e: Employee) => e.status === 'Active'), [employees]);
+    const selectedInactiveEmployee = useMemo(() => {
+        if (!formData.custodianId) return null;
+        return employees.find((e: Employee) => e.id === formData.custodianId && e.status !== 'Active') || null;
+    }, [employees, formData.custodianId]);
 
     useEffect(() => {
         if (initialData) {
@@ -1496,7 +1501,10 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                         onChange={e => setFormData({...formData, custodianId: e.target.value})}
                      >
                          <option value="">Select Employee...</option>
-                         {employees.map((e: Employee) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
+                         {selectedInactiveEmployee && (
+                             <option value={selectedInactiveEmployee.id}>{getEmployeeFullName(selectedInactiveEmployee)} (Inactive)</option>
+                         )}
+                         {activeEmployees.map((e: Employee) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
                      </select>
                 </div>
                 
@@ -2069,6 +2077,11 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const activeEmployees = useMemo(() => employees.filter((e: Employee) => e.status === 'Active'), [employees]);
+    const selectedInactiveCustodian = useMemo(() => {
+        if (custodian === 'All') return null;
+        return employees.find((e: Employee) => e.id === custodian && e.status !== 'Active') || null;
+    }, [employees, custodian]);
 
     const filtered = useMemo(() => {
         const term = search.toLowerCase();
@@ -2132,7 +2145,10 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
                     className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[180px]"
                 >
                     <option value="All">All Custodians</option>
-                    {employees.map((e: Employee) => (
+                    {selectedInactiveCustodian && (
+                        <option value={selectedInactiveCustodian.id}>{getEmployeeFullName(selectedInactiveCustodian)} (Inactive)</option>
+                    )}
+                    {activeEmployees.map((e: Employee) => (
                         <option key={e.id} value={e.id}>
                             {getEmployeeFullName(e)}
                         </option>
@@ -2255,6 +2271,11 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
     const [employeeId, setEmployeeId] = useState('');
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [error, setError] = useState('');
+    const activeEmployees = useMemo(() => employees.filter((e: Employee) => e.status === 'Active'), [employees]);
+    const selectedInactiveEmployee = useMemo(() => {
+        if (!employeeId) return null;
+        return employees.find((e: Employee) => e.id === employeeId && e.status !== 'Active') || null;
+    }, [employees, employeeId]);
 
     const availableAssets = assets.filter((a: Asset) => a.status === 'Active');
 
@@ -2305,7 +2326,10 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Custodian</label>
                     <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
                          <option value="">Select Employee...</option>
-                         {employees.map((e:any) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
+                         {selectedInactiveEmployee && (
+                             <option value={selectedInactiveEmployee.id}>{getEmployeeFullName(selectedInactiveEmployee)} (Inactive)</option>
+                         )}
+                         {activeEmployees.map((e:any) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
                     </select>
                  </div>
              </div>
