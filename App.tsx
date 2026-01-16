@@ -232,6 +232,99 @@ const ConfirmDialog = ({ state, onResolve }: { state: { open: boolean; options?:
   );
 };
 
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+const SearchableSelect = ({
+  value,
+  options,
+  onChange,
+  placeholder = 'Select...',
+  disabled = false,
+  className = '',
+}: {
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+}) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = useMemo(() => options.find((o) => o.value === value) || null, [options, value]);
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(term));
+  }, [options, query]);
+
+  useEffect(() => {
+    if (!open) setQuery(selected?.label || '');
+  }, [open, selected?.label]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery(selected?.label || '');
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open, selected?.label]);
+
+  return (
+    <div ref={containerRef} className={`relative ${className}`}>
+      <input
+        type="text"
+        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#006400] disabled:bg-slate-50 disabled:text-slate-400"
+        value={query}
+        onFocus={() => {
+          if (disabled) return;
+          setOpen(true);
+          setQuery('');
+        }}
+        onChange={(e) => {
+          if (disabled) return;
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+      {open && !disabled && (
+        <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-slate-500">No matches found.</div>
+          ) : (
+            filtered.map((option) => (
+              <button
+                type="button"
+                key={option.value}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-100 ${
+                  option.value === value ? 'bg-slate-50 text-slate-700 font-medium' : 'text-slate-600'
+                }`}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                  setQuery(option.label);
+                }}
+              >
+                {option.label}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ESSUHeader = () => (
   <div className="hidden print:block text-center mb-8 font-serif">
     <div className="flex items-center justify-center gap-4 mb-3">
@@ -1327,6 +1420,14 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
         if (!formData.custodianId) return null;
         return employees.find((e: Employee) => e.id === formData.custodianId && e.status !== 'Active') || null;
     }, [employees, formData.custodianId]);
+    const custodianOptions = useMemo(() => {
+        const list: SelectOption[] = [];
+        if (selectedInactiveEmployee) {
+            list.push({ value: selectedInactiveEmployee.id, label: `${getEmployeeFullName(selectedInactiveEmployee)} (Inactive)` });
+        }
+        activeEmployees.forEach((e: Employee) => list.push({ value: e.id, label: getEmployeeFullName(e) }));
+        return list;
+    }, [activeEmployees, selectedInactiveEmployee]);
 
     useEffect(() => {
         if (initialData) {
@@ -1495,17 +1596,13 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                 </div>
                  <div>
                      <label className="block text-sm font-medium text-slate-700 mb-1">Custodian <span className="text-red-500">*</span></label>
-                     <select 
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                     <SearchableSelect
                         value={formData.custodianId}
-                        onChange={e => setFormData({...formData, custodianId: e.target.value})}
-                     >
-                         <option value="">Select Employee...</option>
-                         {selectedInactiveEmployee && (
-                             <option value={selectedInactiveEmployee.id}>{getEmployeeFullName(selectedInactiveEmployee)} (Inactive)</option>
-                         )}
-                         {activeEmployees.map((e: Employee) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
-                     </select>
+                        options={custodianOptions}
+                        onChange={(next) => setFormData({ ...formData, custodianId: next })}
+                        placeholder="Select Employee..."
+                        className="w-full"
+                     />
                 </div>
                 
                 {initialData && (
@@ -2082,6 +2179,14 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
         if (custodian === 'All') return null;
         return employees.find((e: Employee) => e.id === custodian && e.status !== 'Active') || null;
     }, [employees, custodian]);
+    const custodianOptions = useMemo(() => {
+        const list: SelectOption[] = [{ value: 'All', label: 'All Custodians' }];
+        if (selectedInactiveCustodian) {
+            list.push({ value: selectedInactiveCustodian.id, label: `${getEmployeeFullName(selectedInactiveCustodian)} (Inactive)` });
+        }
+        activeEmployees.forEach((e: Employee) => list.push({ value: e.id, label: getEmployeeFullName(e) }));
+        return list;
+    }, [activeEmployees, selectedInactiveCustodian]);
 
     const filtered = useMemo(() => {
         const term = search.toLowerCase();
@@ -2139,21 +2244,13 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
                     <option value="Active">Active</option>
                     <option value="Closed">Closed</option>
                 </select>
-                <select
+                <SearchableSelect
                     value={custodian}
-                    onChange={(e) => setCustodian(e.target.value)}
-                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[180px]"
-                >
-                    <option value="All">All Custodians</option>
-                    {selectedInactiveCustodian && (
-                        <option value={selectedInactiveCustodian.id}>{getEmployeeFullName(selectedInactiveCustodian)} (Inactive)</option>
-                    )}
-                    {activeEmployees.map((e: Employee) => (
-                        <option key={e.id} value={e.id}>
-                            {getEmployeeFullName(e)}
-                        </option>
-                    ))}
-                </select>
+                    options={custodianOptions}
+                    onChange={setCustodian}
+                    placeholder="All Custodians"
+                    className="w-[180px]"
+                />
                 <div className="flex gap-2 items-center text-sm text-slate-600 flex-wrap">
                     <div className="flex gap-2 items-center">
                         <span className="text-slate-500">From</span>
@@ -2276,6 +2373,14 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
         if (!employeeId) return null;
         return employees.find((e: Employee) => e.id === employeeId && e.status !== 'Active') || null;
     }, [employees, employeeId]);
+    const custodianOptions = useMemo(() => {
+        const list: SelectOption[] = [];
+        if (selectedInactiveEmployee) {
+            list.push({ value: selectedInactiveEmployee.id, label: `${getEmployeeFullName(selectedInactiveEmployee)} (Inactive)` });
+        }
+        activeEmployees.forEach((e: Employee) => list.push({ value: e.id, label: getEmployeeFullName(e) }));
+        return list;
+    }, [activeEmployees, selectedInactiveEmployee]);
 
     const availableAssets = assets.filter((a: Asset) => a.status === 'Active');
 
@@ -2324,13 +2429,13 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
                  </div>
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Custodian</label>
-                    <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-                         <option value="">Select Employee...</option>
-                         {selectedInactiveEmployee && (
-                             <option value={selectedInactiveEmployee.id}>{getEmployeeFullName(selectedInactiveEmployee)} (Inactive)</option>
-                         )}
-                         {activeEmployees.map((e:any) => <option key={e.id} value={e.id}>{getEmployeeFullName(e)}</option>)}
-                    </select>
+                    <SearchableSelect
+                        value={employeeId}
+                        options={custodianOptions}
+                        onChange={setEmployeeId}
+                        placeholder="Select Employee..."
+                        className="w-full"
+                    />
                  </div>
              </div>
              <div>
