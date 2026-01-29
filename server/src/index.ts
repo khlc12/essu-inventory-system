@@ -66,7 +66,7 @@ const verifyState = (token: string) => {
 };
 
 const mapRoleFromUserInfo = (userInfo: any): 'Officer' | 'Staff' => {
-  const dept = (userInfo?.department || '').toLowerCase();
+  const unit = (userInfo?.unit || '').toLowerCase();
   const position = (
     userInfo?.position ||
     userInfo?.job_title ||
@@ -75,11 +75,10 @@ const mapRoleFromUserInfo = (userInfo: any): 'Officer' | 'Staff' => {
   ).toLowerCase();
   const roles: string[] = (userInfo?.roles || []).map((r: any) => String(r).toLowerCase());
 
-  const inSupply = dept.includes('supply');
+  const inSupply = unit.includes('supply and property management office');
   const looksOfficer =
-    position.includes('supply officer') ||
-    position.includes('officer') ||
-    roles.some((r) => ['admin', 'officer', 'supply_officer', 'supply officer'].includes(r));
+    position.includes('director') ||
+    roles.some((r) => ['admin', 'director', 'supply_director', 'supply director'].includes(r));
 
   if (inSupply && looksOfficer) return 'Officer';
   if (inSupply) return 'Staff';
@@ -88,8 +87,8 @@ const mapRoleFromUserInfo = (userInfo: any): 'Officer' | 'Staff' => {
 
 const normalizeEmail = (value: string | undefined | null) => (value || '').trim().toLowerCase();
 const isAllowedUser = (userInfo: any) => {
-  const dept = (userInfo?.department || '').toLowerCase();
-  return dept.includes('supply office');
+  const unit = (userInfo?.unit || '').toLowerCase();
+  return unit.includes('supply and property management office');
 };
 
 app.use(cors());
@@ -203,7 +202,7 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   const userInfo = await userResponse.json();
 
   if (!isAllowedUser(userInfo)) {
-    const msg = 'You don\'t have permission to use this system. Only Supply Office accounts (Supply Officer/Staff) can sign in.';
+    const msg = 'You don\'t have permission to use this system. Only Supply and Property Management Office accounts can sign in.';
     if (req.headers.accept?.includes('text/html')) {
       const redirectUrl = `${FRONTEND_BASE_URL}?sso_error=${encodeURIComponent(msg)}`;
       return res.redirect(redirectUrl);
