@@ -252,15 +252,15 @@ app.get('/api/departments', asyncHandler(async (_req, res) => {
 }));
 
 app.post('/api/departments', asyncHandler(async (req, res) => {
-  res.status(403).json({ message: 'Departments are managed via HRMS sync. Manual creation is disabled.' });
+  res.status(403).json({ message: 'Units are managed via HRMS sync. Manual creation is disabled.' });
 }));
 
 app.put('/api/departments/:id', asyncHandler(async (req, res) => {
-  res.status(403).json({ message: 'Departments are managed via HRMS sync. Manual updates are disabled.' });
+  res.status(403).json({ message: 'Units are managed via HRMS sync. Manual updates are disabled.' });
 }));
 
 app.delete('/api/departments/:id', asyncHandler(async (req, res) => {
-  res.status(403).json({ message: 'Departments are managed via HRMS sync. Manual deactivation is disabled.' });
+  res.status(403).json({ message: 'Units are managed via HRMS sync. Manual deactivation is disabled.' });
 }));
 
 app.get('/api/locations', asyncHandler(async (_req, res) => {
@@ -446,16 +446,17 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
     return candidate;
   };
 
-  const ensureDepartment = async (hrDept: any) => {
-    const code = String(hrDept?.code || '').trim();
-    const name = String(hrDept?.name || '').trim();
+  const ensureDepartment = async (hrUnit: any) => {
+    const code = String(hrUnit?.code || '').trim();
+    const nameValue = typeof hrUnit === 'string' ? hrUnit : hrUnit?.name;
+    const name = String(nameValue || '').trim();
     const codeKey = code.toLowerCase();
     const nameKey = name.toLowerCase();
 
     if (codeKey && deptByCode.has(codeKey)) return deptByCode.get(codeKey);
     if (nameKey && deptByName.has(nameKey)) return deptByName.get(nameKey);
 
-    const resolvedName = name || code || 'Unassigned Department';
+    const resolvedName = name || code || 'Unassigned Unit';
     const resolvedCode = code || toDeptCode(resolvedName);
     const created = await prisma.department.create({
       data: { code: resolvedCode, name: resolvedName, status: 'Active' },
@@ -512,7 +513,7 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
         skipped += 1;
         continue;
       }
-      const dept = await ensureDepartment(emp.department);
+      const dept = await ensureDepartment(emp.unit);
       if (!dept) {
         skipped += 1;
         continue;
@@ -582,7 +583,7 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'No HRMS access token available. Please sign in via SSO first.' });
   }
 
-  const url = new URL(`${HRMS_API_BASE_URL.replace(/\/$/, '')}/api/departments`);
+  const url = new URL(`${HRMS_API_BASE_URL.replace(/\/$/, '')}/api/units`);
   url.searchParams.set('include_deleted', 'true');
 
   const response = await fetch(url.toString(), {
@@ -594,7 +595,7 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
 
   if (!response.ok) {
     const text = await response.text();
-    return res.status(502).json({ message: text || 'HRMS department request failed.' });
+    return res.status(502).json({ message: text || 'HRMS unit request failed.' });
   }
 
   const payload = await response.json();
@@ -863,7 +864,7 @@ app.post('/api/transactions', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'supplier and referenceNo are required for Stock In.' });
   }
   if (type === 'Stock Out' && !departmentId) {
-    return res.status(400).json({ message: 'departmentId is required for Stock Out.' });
+    return res.status(400).json({ message: 'Unit is required for Stock Out.' });
   }
 
   for (const item of items) {
@@ -933,7 +934,7 @@ app.get('/api/mrs', asyncHandler(async (_req, res) => {
 app.post('/api/mrs', asyncHandler(async (req, res) => {
   const { mrNumber, dateIssued, employeeId, departmentId, items = [], status = 'Active', remarks } = req.body || {};
   if (!dateIssued || !employeeId || !departmentId) {
-    return res.status(400).json({ message: 'dateIssued, employeeId, and departmentId are required.' });
+    return res.status(400).json({ message: 'dateIssued, employeeId, and unit are required.' });
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: 'At least one asset is required.' });

@@ -789,7 +789,7 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                             </span>
                         </div>
                         <div className="text-xs text-slate-500">
-                            Last department sync:{' '}
+                            Last unit sync:{' '}
                             <span className="font-medium text-slate-700">
                                 {settings.integrations?.lastDepartmentSyncAt ? formatDateTime(settings.integrations.lastDepartmentSyncAt) : 'Never'}
                             </span>
@@ -856,8 +856,8 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                                 className="flex-1 px-4 py-2 border border-teal-200 bg-teal-50 rounded-lg flex items-center justify-center gap-2 hover:bg-teal-100 text-teal-700"
                                 onClick={async () => {
                                     const ok = await confirm({
-                                        title: 'Sync departments from HRMS?',
-                                        message: 'This will pull the latest departments list from HRMS and update the local database.',
+                                        title: 'Sync units from HRMS?',
+                                        message: 'This will pull the latest unit list from HRMS and update the local database.',
                                         confirmLabel: 'Sync now',
                                         cancelLabel: 'Cancel',
                                         variant: 'info',
@@ -866,14 +866,14 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                                     try {
                                         const result = await onSyncDepartments?.();
                                         const summary = result
-                                            ? `Processed ${result.processed} departments (${result.inserted} new, ${result.updated} updated, ${result.inactivated} inactivated).`
-                                            : 'Department sync completed.';
+                                            ? `Processed ${result.processed} units (${result.inserted} new, ${result.updated} updated, ${result.inactivated} inactivated).`
+                                            : 'Unit sync completed.';
                                         success(summary);
-                                        if (onLog) onLog('Synced Departments', 'HRMS', summary);
+                                        if (onLog) onLog('Synced Units', 'HRMS', summary);
                                     } catch (err: any) {
                                         await confirm({
                                             title: 'Sync failed',
-                                            message: err?.message || 'Failed to sync departments.',
+                                            message: err?.message || 'Failed to sync units.',
                                             confirmLabel: 'Close',
                                             hideCancel: true,
                                             variant: 'info',
@@ -881,7 +881,7 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                                     }
                                 }}
                             >
-                                <RefreshCw size={16} /> Sync Departments
+                                <RefreshCw size={16} /> Sync Units
                             </button>
                         )}
                         <button
@@ -1280,7 +1280,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
                     <option value="Retired">Retired</option>
                 </select>
                 <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400] max-w-[150px]" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
-                    <option value="All">All Departments</option>
+                    <option value="All">All Units</option>
                     {selectedInactiveDept && (
                         <option value={selectedInactiveDept.id}>{selectedInactiveDept.code} (Inactive)</option>
                     )}
@@ -1569,13 +1569,13 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                      <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-1">Department <span className="text-red-500">*</span></label>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Unit <span className="text-red-500">*</span></label>
                          <select 
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
                             value={formData.departmentId}
                             onChange={e => setFormData({...formData, departmentId: e.target.value})}
                          >
-                             <option value="">Select Department...</option>
+                             <option value="">Select Unit...</option>
                              {selectedInactiveDept && (
                                  <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
                              )}
@@ -1672,7 +1672,7 @@ const AssetDetail = ({ asset, catalog, departments, locations, employees, funds,
                         <div className="font-medium text-slate-700">{loc ? loc.name : '-'}</div>
                     </div>
                     <div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Department</div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Unit</div>
                         <div className="font-medium text-slate-700">{dept ? dept.name : '-'}</div>
                     </div>
                     <div>
@@ -1779,7 +1779,7 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
                 <option value="Stock Out">Stock Out</option>
             </select>
             <select value={filterDept} onChange={(e) => { setFilterDept(e.target.value); resetPagination(); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[200px]">
-                <option value="All">All Departments</option>
+                <option value="All">All Units</option>
                 {selectedInactiveDept && (
                     <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
                 )}
@@ -1805,7 +1805,7 @@ const StockTransactionList = ({ transactions, onNavigate, departments, catalog }
                         <th className="px-6 py-4">Transaction ID</th>
                         <th className="px-6 py-4">Type</th>
                         <th className="px-6 py-4">Date</th>
-                        <th className="px-6 py-4">Source / Department</th>
+                        <th className="px-6 py-4">Source / Unit</th>
                         <th className="px-6 py-4">Items</th>
                         <th className="px-6 py-4">Status</th>
                         <th className="px-6 py-4 text-right">Actions</th>
@@ -1937,7 +1937,7 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
             return;
         }
         if (type === 'Stock Out' && !departmentId) {
-            setError('Department is required for Stock Out.');
+            setError('Unit is required for Stock Out.');
             return;
         }
         if (lineItems.length === 0) {
@@ -1985,9 +1985,9 @@ const StockTransactionForm = ({ onCancel, onSave, catalog, departments, isSaving
              </div>
              {type === 'Stock Out' ? (
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Department / Destination</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Unit / Destination</label>
                     <select className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-                        <option value="">Select Department...</option>
+                        <option value="">Select Unit...</option>
                         {selectedInactiveDept && (
                             <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
                         )}
@@ -2096,7 +2096,7 @@ const StockTransactionDetail = ({ transaction, catalog, departments, onBack }: a
                         {transaction.type === 'Stock In' ? (
                             <div className="text-slate-500">Supplier: {transaction.supplier || '-'}</div>
                         ) : (
-                            <div className="text-slate-500">Department: {dept ? dept.name : transaction.departmentId || '-'}</div>
+                            <div className="text-slate-500">Unit: {dept ? dept.name : transaction.departmentId || '-'}</div>
                         )}
                         {transaction.referenceNo && <div className="text-slate-500">Reference: {transaction.referenceNo}</div>}
                         {transaction.remarks && <div className="text-slate-500">Remarks: {transaction.remarks}</div>}
@@ -2501,7 +2501,7 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
                         <span className="font-semibold">Custodian:</span> {getEmployeeFullName(emp)}
                     </div>
                     <div className="text-right">
-                        <span className="font-semibold">Department:</span> {dept ? dept.name : mr.departmentId}
+                        <span className="font-semibold">Unit:</span> {dept ? dept.name : mr.departmentId}
                     </div>
                 </div>
 
@@ -2574,7 +2574,7 @@ const AuditList = ({ audits, onNavigate, departments, locations }: any) => {
         const term = search.toLowerCase();
         return audits.filter((a: AuditSession) => {
             const matchesStatus = status === 'All' || a.status === status;
-            const scopeName = a.departmentId ? 'Department' : a.locationId ? 'Location' : 'All';
+            const scopeName = a.departmentId ? 'Unit' : a.locationId ? 'Location' : 'All';
             const matchesScope = scope === 'All' || scopeName === scope;
             const matchesSearch = term === '' || a.sessionId.toLowerCase().includes(term) || a.description.toLowerCase().includes(term);
             const ts = new Date(a.date).getTime();
@@ -2593,7 +2593,7 @@ const AuditList = ({ audits, onNavigate, departments, locations }: any) => {
     );
 
     const scopeLabel = (a: AuditSession) => {
-        if (a.departmentId) return departments.find((d: Department) => d.id === a.departmentId)?.name || 'Department';
+        if (a.departmentId) return departments.find((d: Department) => d.id === a.departmentId)?.name || 'Unit';
         if (a.locationId) return locations.find((l: Location) => l.id === a.locationId)?.name || 'Location';
         return 'All';
     };
@@ -2630,7 +2630,7 @@ const AuditList = ({ audits, onNavigate, departments, locations }: any) => {
             </select>
             <select value={scope} onChange={(e) => { setScope(e.target.value); resetPage(); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] w-[150px]">
                 <option value="All">All Scope</option>
-                <option value="Department">Department</option>
+                <option value="Unit">Unit</option>
                 <option value="Location">Location</option>
             </select>
             <div className="flex gap-2 items-center text-sm text-slate-600 flex-wrap">
@@ -2755,7 +2755,7 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
 
     const handleStart = async () => {
         if (!description || (!selectedLoc && !selectedDept)) {
-            await confirm({ title: 'Missing details', message: 'Description and at least one scope (Location or Department) are required.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            await confirm({ title: 'Missing details', message: 'Description and at least one scope (Location or Unit) are required.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
             return;
         }
 
@@ -2768,7 +2768,7 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
         });
 
         if (!relevantAssets.length) {
-            await confirm({ title: 'No assets in scope', message: 'No active assets match the selected location/department. Please adjust your filters.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            await confirm({ title: 'No assets in scope', message: 'No active assets match the selected location/unit. Please adjust your filters.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
             return;
         }
 
@@ -2850,13 +2850,13 @@ const AuditNew = ({ onCancel, onSave, locations, departments, assets, isSaving }
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Department Scope</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Unit Scope</label>
                         <select 
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
                             value={selectedDept}
                             onChange={e => setSelectedDept(e.target.value)}
                         >
-                            <option value="">All Departments</option>
+                            <option value="">All Units</option>
                             {selectedInactiveDept && (
                                 <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
                             )}
@@ -3243,7 +3243,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
 
     const handleSave = async () => {
         if (!formData.employeeId || !formData.firstName || !formData.lastName || !formData.departmentId) {
-            setError('Employee ID, First Name, Last Name, and Department are required.');
+            setError('Employee ID, First Name, Last Name, and Unit are required.');
             return;
         }
 
@@ -3309,7 +3309,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                     value={filterDept}
                     onChange={(e) => setFilterDept(e.target.value)}
                 >
-                    <option value="All">All Departments</option>
+                    <option value="All">All Units</option>
                     {selectedInactiveDept && (
                         <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
                     )}
@@ -3329,7 +3329,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                             <th className="px-6 py-4">ID</th>
                             <th className="px-6 py-4">Full Name</th>
                             <th className="px-6 py-4">Position</th>
-                            <th className="px-6 py-4">Department</th>
+                            <th className="px-6 py-4">Unit</th>
                             <th className="px-6 py-4">Status</th>
                             <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
@@ -3379,13 +3379,13 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-700 mb-1">Department <span className="text-red-500">*</span></label>
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Unit <span className="text-red-500">*</span></label>
                                     <select 
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]"
                                         value={formData.departmentId}
                                         onChange={e => setFormData({...formData, departmentId: e.target.value})}
                                     >
-                                        <option value="">Select Department...</option>
+                                        <option value="">Select Unit...</option>
                                         {selectedInactiveDeptForForm && (
                                             <option value={selectedInactiveDeptForForm.id}>{selectedInactiveDeptForForm.name} (Inactive)</option>
                                         )}
@@ -3472,7 +3472,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
 
     const handleEdit = (dept: Department) => {
         if (isReadOnly) {
-            confirm({ title: 'Read-only', message: 'Departments are synced from HRMS and cannot be edited here.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            confirm({ title: 'Read-only', message: 'Units are synced from HRMS and cannot be edited here.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
             return;
         }
         setEditingDept(dept);
@@ -3489,7 +3489,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
 
     const handleAdd = () => {
         if (isReadOnly) {
-            confirm({ title: 'Read-only', message: 'Departments are synced from HRMS and cannot be added manually.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            confirm({ title: 'Read-only', message: 'Units are synced from HRMS and cannot be added manually.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
             return;
         }
         setEditingDept(null);
@@ -3500,17 +3500,17 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
 
     const handleDelete = async (id: string) => {
         if (userRole !== 'Officer') {
-            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate departments.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
+            await confirm({ title: 'Not allowed', message: 'Only Officers can deactivate units.', confirmLabel: 'OK', hideCancel: true, variant: 'info' });
             return;
         }
-        const ok = await confirm({ title: 'Deactivate department?', message: 'Are you sure you want to deactivate this department?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
+        const ok = await confirm({ title: 'Deactivate unit?', message: 'Are you sure you want to deactivate this unit?', confirmLabel: 'Yes, deactivate', variant: 'danger' });
         if (!ok) return;
         try {
             const updatedDept = await deactivateDepartment(id);
             setDepartments(departments.map((d: Department) => d.id === id ? updatedDept : d));
-            if (onLog) onLog('Deactivated Department', 'Master Data', `Deactivated department ID: ${id}`, id);
+            if (onLog) onLog('Deactivated Unit', 'Master Data', `Deactivated unit ID: ${id}`, id);
         } catch (err: any) {
-            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate department.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
+            await confirm({ title: 'Action failed', message: err?.message || 'Failed to deactivate unit.', confirmLabel: 'Close', hideCancel: true, variant: 'info' });
         }
     };
 
@@ -3525,8 +3525,8 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
         const isCodeDuplicate = departments.some((d: Department) => d.code === formData.code && d.id !== editingDept?.id);
         const isNameDuplicate = departments.some((d: Department) => d.name === formData.name && d.id !== editingDept?.id);
 
-        if (isCodeDuplicate) { setError('Department Code must be unique.'); return; }
-        if (isNameDuplicate) { setError('Department Name must be unique.'); return; }
+        if (isCodeDuplicate) { setError('Unit Code must be unique.'); return; }
+        if (isNameDuplicate) { setError('Unit Name must be unique.'); return; }
 
         setIsSaving(true);
         setError('');
@@ -3534,17 +3534,17 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
             if (editingDept) {
                 const updated = await updateDepartment(editingDept.id, formData);
                 setDepartments(departments.map((d: Department) => d.id === editingDept.id ? updated : d));
-                if (onLog) onLog('Updated Department', 'Master Data', `Updated department: ${formData.code}`, editingDept.id);
-                success('Department updated successfully.');
+                if (onLog) onLog('Updated Unit', 'Master Data', `Updated unit: ${formData.code}`, editingDept.id);
+                success('Unit updated successfully.');
             } else {
                 const created = await createDepartment(formData);
                 setDepartments([...departments, created]);
-                if (onLog) onLog('Created Department', 'Master Data', `Created department: ${formData.code}`, created.id);
-                success('Department created successfully.');
+                if (onLog) onLog('Created Unit', 'Master Data', `Created unit: ${formData.code}`, created.id);
+                success('Unit created successfully.');
             }
             setIsModalOpen(false);
         } catch (err: any) {
-            setError(err?.message || 'Failed to save department.');
+            setError(err?.message || 'Failed to save unit.');
         } finally {
             setIsSaving(false);
         }
@@ -3559,12 +3559,12 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-slate-800">Departments</h1>
+                <h1 className="text-2xl font-bold text-slate-800">Units</h1>
                 <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#006400] bg-green-50 border border-green-100 rounded-full">Synced from HRMS</span>
             </div>
 
             <div className="bg-blue-50 border border-blue-100 text-blue-700 text-sm px-4 py-3 rounded-lg">
-                Departments are synced from HRMS and are read-only in this module.
+                Units are synced from HRMS and are read-only in this module.
             </div>
 
             <div className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -3614,7 +3614,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
                         ))}
                         {filteredDepartments.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-8 text-center text-slate-400">No departments found matching your criteria.</td>
+                                <td colSpan={6} className="px-6 py-8 text-center text-slate-400">No units found matching your criteria.</td>
                             </tr>
                         )}
                     </tbody>
@@ -3626,14 +3626,14 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-bold text-slate-800">{editingDept ? 'Edit Department' : 'New Department'}</h3>
+                            <h3 className="font-bold text-slate-800">{editingDept ? 'Edit Unit' : 'New Unit'}</h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
                         </div>
                         <div className="p-6 space-y-4">
                             {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
                             
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Department Code <span className="text-red-500">*</span></label>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Unit Code <span className="text-red-500">*</span></label>
                                 <input 
                                     type="text" 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
@@ -3644,7 +3644,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
                             </div>
                             
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Department Name <span className="text-red-500">*</span></label>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Unit Name <span className="text-red-500">*</span></label>
                                 <input 
                                     type="text" 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-[#006400]" 
@@ -3689,7 +3689,7 @@ const DepartmentMasterView = ({ departments, setDepartments, locations, onLog, u
                             <div className="pt-2 flex justify-end gap-3">
                                 <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm" disabled={isSaving}>Cancel</button>
                                 <button onClick={handleSave} disabled={isSaving} className={`px-6 py-2 rounded-lg text-sm text-white ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#006400] hover:bg-[#004d00]'}`}>
-                                    {isSaving ? 'Saving...' : 'Save Department'}
+                                    {isSaving ? 'Saving...' : 'Save Unit'}
                                 </button>
                             </div>
                         </div>
@@ -5633,7 +5633,7 @@ const App = () => {
 
                 <NavSection label="Master Data" collapsed={isSidebarCollapsed}>
                      <NavItem icon={<Users size={20} />} label="Employees" active={view === 'mdm-employees'} onClick={() => setView('mdm-employees')} collapsed={isSidebarCollapsed} />
-                     <NavItem icon={<Building size={20} />} label="Departments" active={view === 'mdm-departments'} onClick={() => setView('mdm-departments')} collapsed={isSidebarCollapsed} />
+                    <NavItem icon={<Building size={20} />} label="Units" active={view === 'mdm-departments'} onClick={() => setView('mdm-departments')} collapsed={isSidebarCollapsed} />
                      <NavItem icon={<MapPin size={20} />} label="Locations" active={view === 'mdm-locations'} onClick={() => setView('mdm-locations')} collapsed={isSidebarCollapsed} />
                      <NavItem icon={<Wallet size={20} />} label="Fund Clusters" active={view === 'mdm-funds'} onClick={() => setView('mdm-funds')} collapsed={isSidebarCollapsed} />
                      <NavItem icon={<Tags size={20} />} label="Asset Categories" active={view === 'mdm-categories'} onClick={() => setView('mdm-categories')} collapsed={isSidebarCollapsed} />

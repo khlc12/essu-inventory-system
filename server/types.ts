@@ -58,7 +58,7 @@ export interface Department {
   id: string;
   code: string;
   name: string;
-  head?: string; // Department Head
+  head?: string; // Unit Head
   locationId?: string; // Main Office Location
   status: 'Active' | 'Inactive';
   createdAt?: string;
