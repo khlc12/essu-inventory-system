@@ -180,6 +180,8 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (userResponse.status === 403) {
+    const deniedBody = await userResponse.text();
+    console.log('[SSO] userinfo access_denied body:', deniedBody || '(empty)');
     const msg = 'Access denied. Your HRMS account does not have permission to use this system.';
     if (req.headers.accept?.includes('text/html')) {
       const redirectUrl = `${FRONTEND_BASE_URL}?sso_error=${encodeURIComponent(msg)}`;
