@@ -209,8 +209,7 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (userResponse.status === 403) {
-    const deniedBody = await userResponse.text();
-    console.log('[SSO] userinfo access_denied body:', deniedBody || '(empty)');
+    await userResponse.text();
     const msg = 'Access denied. Your HRMS account does not have permission to use this system.';
     if (req.headers.accept?.includes('text/html')) {
       const redirectUrl = `${FRONTEND_BASE_URL}?sso_error=${encodeURIComponent(msg)}`;
@@ -223,7 +222,6 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: `Failed to load user info: ${text || userResponse.statusText}` });
   }
   const userInfo = await userResponse.json();
-  console.log('[SSO] client_role from userinfo:', userInfo?.client_role ?? userInfo?.clientRole);
 
   const username = normalizeEmail(userInfo.email) || userInfo.username || userInfo.sub;
   if (!username) return res.status(400).json({ message: 'User info missing identifier.' });
