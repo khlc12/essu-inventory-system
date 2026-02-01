@@ -392,7 +392,15 @@ export const INITIAL_SETTINGS: SystemSettings = {
   },
   integrations: {
     lastEmployeeSyncAt: null,
-    lastDepartmentSyncAt: null
+    lastDepartmentSyncAt: null,
+    oauth: {
+      enabled: true,
+      providerUrl: '',
+      clientId: '',
+      clientSecret: '',
+      redirectUri: '',
+      scopes: 'openid profile email'
+    }
   }
 };
 

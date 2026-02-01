@@ -63,6 +63,9 @@ model User {
   username     String        @unique
   passwordHash String
   role         String
+  oauthSub     String?       @unique
+  oauthClientRole String?
+  lastOauthLoginAt DateTime?
   status       Status        @default(Active)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt

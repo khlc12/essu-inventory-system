@@ -692,6 +692,20 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
         }));
         if (onLog) onLog('Updated Settings', 'Settings', `Updated ${section}.${field}`);
     };
+    const handleOauthChange = (field: string, value: any) => {
+        setSettings((prev: any) => ({
+            ...prev,
+            integrations: {
+                ...(prev.integrations || {}),
+                oauth: {
+                    ...(prev.integrations?.oauth || {}),
+                    [field]: value
+                }
+            }
+        }));
+        if (onLog) onLog('Updated Settings', 'Settings', `Updated integrations.oauth.${field}`);
+    };
+    const oauth = settings.integrations?.oauth || {};
 
     return (
         <div className="space-y-6">
@@ -771,6 +785,76 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                                 onChange={(e) => handleChange('documents', 'receivedBy', e.target.value)}
                             />
                         </div>
+                    </div>
+                </div>
+
+                {/* SSO / OAuth Configuration */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                        <ShieldCheck className="text-[#006400]" />
+                        <h3 className="font-bold text-slate-800">SSO / OAuth Configuration</h3>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-700">Enable HRMS SSO</span>
+                        <button
+                            onClick={() => handleOauthChange('enabled', !(oauth.enabled ?? true))}
+                            className="text-[#006400]"
+                        >
+                            {oauth.enabled ?? true ? <ToggleRight size={32} /> : <ToggleLeft size={32} className="text-slate-400" />}
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">OAuth Provider URL</label>
+                            <input
+                                type="text"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                placeholder="https://hr-production.example.com"
+                                value={oauth.providerUrl || ''}
+                                onChange={(e) => handleOauthChange('providerUrl', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Client ID</label>
+                            <input
+                                type="text"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                value={oauth.clientId || ''}
+                                onChange={(e) => handleOauthChange('clientId', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Client Secret</label>
+                            <input
+                                type="password"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                placeholder="Leave blank to keep current secret"
+                                value={oauth.clientSecret || ''}
+                                onChange={(e) => handleOauthChange('clientSecret', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Redirect URI</label>
+                            <input
+                                type="text"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                value={oauth.redirectUri || ''}
+                                onChange={(e) => handleOauthChange('redirectUri', e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Scopes</label>
+                        <input
+                            type="text"
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                            placeholder="openid profile email"
+                            value={oauth.scopes || 'openid profile email'}
+                            onChange={(e) => handleOauthChange('scopes', e.target.value)}
+                        />
+                        <p className="text-xs text-slate-500 mt-2">
+                            Client secret is hidden; leave it blank to keep the existing value.
+                        </p>
                     </div>
                 </div>
 

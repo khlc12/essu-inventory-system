@@ -20,7 +20,6 @@ const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || '';
 const OAUTH_SCOPES = process.env.OAUTH_SCOPES || 'openid profile email';
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.VITE_APP_URL || 'http://localhost:3000';
 const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'state-secret';
-const HRMS_API_BASE_URL = process.env.HRMS_API_BASE_URL || OAUTH_PROVIDER_URL;
 
 type HrmsTokenInfo = {
   accessToken: string;
@@ -28,6 +27,27 @@ type HrmsTokenInfo = {
 };
 
 const hrmsTokenStore = new Map<string, HrmsTokenInfo>();
+
+const getOAuthConfig = async () => {
+  const settings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+  const integrations = (settings?.integrations as any) || {};
+  const oauth = integrations.oauth || {};
+
+  const providerUrl = oauth.providerUrl || OAUTH_PROVIDER_URL || '';
+  const clientId = oauth.clientId || OAUTH_CLIENT_ID || '';
+  const clientSecret = oauth.clientSecret || OAUTH_CLIENT_SECRET || '';
+  const redirectUri = oauth.redirectUri || OAUTH_REDIRECT_URI || '';
+  const scopes = oauth.scopes || OAUTH_SCOPES || 'openid profile email';
+  const enabled = oauth.enabled !== undefined ? Boolean(oauth.enabled) : true;
+
+  return { providerUrl, clientId, clientSecret, redirectUri, scopes, enabled };
+};
+
+const getHrmsApiBaseUrl = async () => {
+  if (process.env.HRMS_API_BASE_URL) return process.env.HRMS_API_BASE_URL;
+  const oauth = await getOAuthConfig();
+  return oauth.providerUrl || '';
+};
 
 const storeHrmsToken = (userId: string, tokenJson: any) => {
   if (!tokenJson?.access_token) return;
@@ -122,30 +142,35 @@ app.post('/api/auth/logout', authMiddleware, asyncHandler(async (req, res) => {
   const isSso = user?.authMethod === 'sso' || (user?.id ? hrmsTokenStore.has(user.id) : false);
   if (user?.id) hrmsTokenStore.delete(user.id);
 
-  if (!isSso || !OAUTH_PROVIDER_URL) {
+  const oauth = await getOAuthConfig();
+  if (!isSso || !oauth.providerUrl) {
     return res.json({ logoutUrl: null, isSso: false });
   }
 
   const redirectBase = FRONTEND_BASE_URL.replace(/\/$/, '');
   const redirectUri = `${redirectBase}/?sso_logged_out=1`;
-  const logoutUrl = `${OAUTH_PROVIDER_URL.replace(/\/$/, '')}/oauth/end-session?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}`;
+  const logoutUrl = `${oauth.providerUrl.replace(/\/$/, '')}/oauth/end-session?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}`;
 
   res.json({ logoutUrl, isSso: true, redirectUri });
 }));
 
 app.get('/api/auth/sso/redirect', asyncHandler(async (_req, res) => {
-  if (!OAUTH_PROVIDER_URL || !OAUTH_CLIENT_ID || !OAUTH_REDIRECT_URI) {
+  const oauth = await getOAuthConfig();
+  if (!oauth.enabled) {
+    return res.status(503).json({ message: 'SSO is currently disabled.' });
+  }
+  if (!oauth.providerUrl || !oauth.clientId || !oauth.redirectUri) {
     return res.status(500).json({ message: 'SSO is not configured.' });
   }
   const state = generateState();
   const params = new URLSearchParams({
-    client_id: OAUTH_CLIENT_ID,
-    redirect_uri: OAUTH_REDIRECT_URI,
+    client_id: oauth.clientId,
+    redirect_uri: oauth.redirectUri,
     response_type: 'code',
-    scope: OAUTH_SCOPES,
+    scope: oauth.scopes,
     state,
   });
-  const url = `${OAUTH_PROVIDER_URL}/oauth/authorize?${params.toString()}`;
+  const url = `${oauth.providerUrl}/oauth/authorize?${params.toString()}`;
   res.json({ url, state });
 }));
 
@@ -153,19 +178,23 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   const { code, state } = req.query as { code?: string; state?: string };
   if (!code || !state) return res.status(400).json({ message: 'Missing code or state' });
   if (!verifyState(state)) return res.status(400).json({ message: 'Invalid state' });
-  if (!OAUTH_PROVIDER_URL || !OAUTH_CLIENT_ID || !OAUTH_CLIENT_SECRET || !OAUTH_REDIRECT_URI) {
+  const oauth = await getOAuthConfig();
+  if (!oauth.enabled) {
+    return res.status(503).json({ message: 'SSO is currently disabled.' });
+  }
+  if (!oauth.providerUrl || !oauth.clientId || !oauth.clientSecret || !oauth.redirectUri) {
     return res.status(500).json({ message: 'SSO is not configured.' });
   }
 
-  const tokenResponse = await fetch(`${OAUTH_PROVIDER_URL}/oauth/token`, {
+  const tokenResponse = await fetch(`${oauth.providerUrl}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
       grant_type: 'authorization_code',
-      client_id: OAUTH_CLIENT_ID,
-      client_secret: OAUTH_CLIENT_SECRET,
+      client_id: oauth.clientId,
+      client_secret: oauth.clientSecret,
       code,
-      redirect_uri: OAUTH_REDIRECT_URI,
+      redirect_uri: oauth.redirectUri,
     }),
   });
   if (!tokenResponse.ok) {
@@ -176,7 +205,7 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   const accessToken = tokenJson.access_token;
   if (!accessToken) return res.status(400).json({ message: 'No access token returned by provider.' });
 
-  const userResponse = await fetch(`${OAUTH_PROVIDER_URL}/oauth/userinfo`, {
+  const userResponse = await fetch(`${oauth.providerUrl}/oauth/userinfo`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (userResponse.status === 403) {
@@ -199,13 +228,39 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   const username = normalizeEmail(userInfo.email) || userInfo.username || userInfo.sub;
   if (!username) return res.status(400).json({ message: 'User info missing identifier.' });
   const role = mapRoleFromUserInfo(userInfo);
+  const oauthSub = userInfo?.sub ? String(userInfo.sub) : null;
+  const oauthClientRole = userInfo?.client_role || userInfo?.clientRole || null;
   const passwordHash = randomUUID();
 
-  const user = await prisma.user.upsert({
-    where: { username },
-    update: { role, status: 'Active' },
-    create: { username, passwordHash, role, status: 'Active' },
-  });
+  let user = oauthSub ? await prisma.user.findUnique({ where: { oauthSub } }) : null;
+  if (!user) {
+    user = await prisma.user.findUnique({ where: { username } });
+  }
+
+  if (user) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        role,
+        status: 'Active',
+        oauthSub: oauthSub || user.oauthSub,
+        oauthClientRole: oauthClientRole || user.oauthClientRole,
+        lastOauthLoginAt: new Date(),
+      },
+    });
+  } else {
+    user = await prisma.user.create({
+      data: {
+        username,
+        passwordHash,
+        role,
+        status: 'Active',
+        oauthSub: oauthSub || undefined,
+        oauthClientRole: oauthClientRole || undefined,
+        lastOauthLoginAt: new Date(),
+      },
+    });
+  }
   storeHrmsToken(user.id, tokenJson);
 
   const token = signToken({ id: user.id, username: user.username, role: user.role as any, authMethod: 'sso' });
@@ -405,7 +460,8 @@ app.delete('/api/employees/:id', asyncHandler(async (req, res) => {
 app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
   if (!ensureRole(req, res, ['Officer'])) return;
   const authUser = (req as any).user as { id: string } | undefined;
-  if (!HRMS_API_BASE_URL) {
+  const hrmsBaseUrl = await getHrmsApiBaseUrl();
+  if (!hrmsBaseUrl) {
     return res.status(500).json({ message: 'HRMS API base URL is not configured.' });
   }
 
@@ -472,7 +528,7 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
   const perPage = 100;
 
   while (currentPage <= lastPage) {
-    const url = new URL(`${HRMS_API_BASE_URL.replace(/\/$/, '')}/api/employees`);
+    const url = new URL(`${hrmsBaseUrl.replace(/\/$/, '')}/api/employees`);
     url.searchParams.set('include_deleted', 'true');
     url.searchParams.set('status', 'all');
     url.searchParams.set('page', String(currentPage));
@@ -560,7 +616,8 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
 app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
   if (!ensureRole(req, res, ['Officer'])) return;
   const authUser = (req as any).user as { id: string } | undefined;
-  if (!HRMS_API_BASE_URL) {
+  const hrmsBaseUrl = await getHrmsApiBaseUrl();
+  if (!hrmsBaseUrl) {
     return res.status(500).json({ message: 'HRMS API base URL is not configured.' });
   }
 
@@ -569,7 +626,7 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'No HRMS access token available. Please sign in via SSO first.' });
   }
 
-  const url = new URL(`${HRMS_API_BASE_URL.replace(/\/$/, '')}/api/units`);
+  const url = new URL(`${hrmsBaseUrl.replace(/\/$/, '')}/api/units`);
   url.searchParams.set('include_deleted', 'true');
 
   const response = await fetch(url.toString(), {
@@ -995,12 +1052,39 @@ app.post('/api/logs', asyncHandler(async (req, res) => {
 
 app.get('/api/settings', asyncHandler(async (_req, res) => {
   const settings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-  res.json(settings);
+  if (!settings) return res.json(settings);
+  const integrations = (settings.integrations as any) || {};
+  const oauth = integrations.oauth ? { ...integrations.oauth } : undefined;
+  if (oauth?.clientSecret) {
+    oauth.clientSecret = '';
+  }
+  res.json({
+    ...settings,
+    integrations: {
+      ...integrations,
+      ...(oauth ? { oauth } : {}),
+    },
+  });
 }));
 
 app.put('/api/settings', authMiddleware, asyncHandler(async (req, res) => {
   if (!ensureRole(req, res, ['Officer'])) return;
   const { general, inventory, documents, notifications, integrations } = req.body || {};
+  const existing = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+  const currentIntegrations = (existing?.integrations as any) || {};
+  let nextIntegrations = currentIntegrations;
+  if (integrations) {
+    nextIntegrations = { ...currentIntegrations, ...integrations };
+    if (integrations.oauth) {
+      const prevOauth = currentIntegrations.oauth || {};
+      const incomingOauth = integrations.oauth || {};
+      const mergedOauth = { ...prevOauth, ...incomingOauth };
+      if (!incomingOauth.clientSecret) {
+        mergedOauth.clientSecret = prevOauth.clientSecret;
+      }
+      nextIntegrations.oauth = mergedOauth;
+    }
+  }
   const updated = await prisma.systemSettings.update({
     where: { id: 1 },
     data: {
@@ -1008,7 +1092,7 @@ app.put('/api/settings', authMiddleware, asyncHandler(async (req, res) => {
       inventory,
       documents,
       notifications,
-      integrations,
+      integrations: nextIntegrations,
     },
   });
   res.json(updated);

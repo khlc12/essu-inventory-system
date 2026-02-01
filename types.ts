@@ -287,6 +287,14 @@ export interface SystemSettings {
   integrations?: {
     lastEmployeeSyncAt?: string | null;
     lastDepartmentSyncAt?: string | null;
+    oauth?: {
+      enabled?: boolean;
+      providerUrl?: string;
+      clientId?: string;
+      clientSecret?: string;
+      redirectUri?: string;
+      scopes?: string;
+    };
   };
 }
 
