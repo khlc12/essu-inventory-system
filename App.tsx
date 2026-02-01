@@ -952,7 +952,12 @@ const LandingPage = ({ onLogin, onStartSso }: { onLogin: (username: string, pass
     const ssoError = params.get('sso_error');
     const ssoLoggedOut = params.get('sso_logged_out') || params.get('logged_out');
     if (ssoError) {
-      setError(ssoError);
+      const normalized = ssoError.toLowerCase();
+      const friendly =
+        normalized.includes('access denied') || normalized.includes('not have permission')
+          ? 'SSO access denied. Your HRMS account is not authorized to use this system. Please contact the Supply and Property Management Office.'
+          : ssoError;
+      setError(friendly);
       params.delete('sso_error');
     }
     if (ssoLoggedOut) {

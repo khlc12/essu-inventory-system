@@ -66,30 +66,14 @@ const verifyState = (token: string) => {
 };
 
 const mapRoleFromUserInfo = (userInfo: any): 'Officer' | 'Staff' => {
-  const unit = (userInfo?.unit || '').toLowerCase();
-  const position = (
-    userInfo?.position ||
-    userInfo?.job_title ||
-    userInfo?.title ||
-    ''
-  ).toLowerCase();
-  const roles: string[] = (userInfo?.roles || []).map((r: any) => String(r).toLowerCase());
-
-  const inSupply = unit.includes('supply and property management office');
-  const looksOfficer =
-    position.includes('director') ||
-    roles.some((r) => ['admin', 'director', 'supply_director', 'supply director'].includes(r));
-
-  if (inSupply && looksOfficer) return 'Officer';
-  if (inSupply) return 'Staff';
+  const clientRole = String(userInfo?.client_role || userInfo?.clientRole || '')
+    .trim()
+    .toLowerCase();
+  if (clientRole === 'admin') return 'Officer';
   return 'Staff';
 };
 
 const normalizeEmail = (value: string | undefined | null) => (value || '').trim().toLowerCase();
-const isAllowedUser = (userInfo: any) => {
-  const unit = (userInfo?.unit || '').toLowerCase();
-  return unit.includes('supply and property management office');
-};
 
 app.use(cors());
 app.use(express.json());
@@ -195,20 +179,20 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   const userResponse = await fetch(`${OAUTH_PROVIDER_URL}/oauth/userinfo`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!userResponse.ok) {
-    const text = await userResponse.text();
-    return res.status(400).json({ message: `Failed to load user info: ${text || userResponse.statusText}` });
-  }
-  const userInfo = await userResponse.json();
-
-  if (!isAllowedUser(userInfo)) {
-    const msg = 'You don\'t have permission to use this system. Only Supply and Property Management Office accounts can sign in.';
+  if (userResponse.status === 403) {
+    const msg = 'Access denied. Your HRMS account does not have permission to use this system.';
     if (req.headers.accept?.includes('text/html')) {
       const redirectUrl = `${FRONTEND_BASE_URL}?sso_error=${encodeURIComponent(msg)}`;
       return res.redirect(redirectUrl);
     }
     return res.status(403).json({ message: msg });
   }
+  if (!userResponse.ok) {
+    const text = await userResponse.text();
+    return res.status(400).json({ message: `Failed to load user info: ${text || userResponse.statusText}` });
+  }
+  const userInfo = await userResponse.json();
+  console.log('[SSO] client_role from userinfo:', userInfo?.client_role ?? userInfo?.clientRole);
 
   const username = normalizeEmail(userInfo.email) || userInfo.username || userInfo.sub;
   if (!username) return res.status(400).json({ message: 'User info missing identifier.' });
