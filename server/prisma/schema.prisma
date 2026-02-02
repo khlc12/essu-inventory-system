@@ -177,12 +177,12 @@ model Asset {
   dateAcquired   DateTime
   fundClusterId  String
   fundCluster    FundCluster   @relation(fields: [fundClusterId], references: [id])
-  departmentId   String
-  department     Department    @relation(fields: [departmentId], references: [id])
+  departmentId   String?
+  department     Department?   @relation(fields: [departmentId], references: [id])
   custodianId    String
   custodian      Employee      @relation("AssetCustodian", fields: [custodianId], references: [id])
-  locationId     String
-  location       Location      @relation(fields: [locationId], references: [id])
+  locationId     String?
+  location       Location?     @relation(fields: [locationId], references: [id])
   remarks        String?
   status         AssetStatus
   imageUrl       String?

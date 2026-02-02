@@ -169,9 +169,9 @@ export interface Asset {
   quantity: number; // Usually 1 for PPE
   dateAcquired: string;
   fundClusterId: string;
-  departmentId: string;
+  departmentId: string | null;
   custodianId: string;
-  locationId: string;
+  locationId: string | null;
   remarks?: string;
   status: AssetStatus;
   imageUrl?: string;

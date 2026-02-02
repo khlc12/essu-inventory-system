@@ -874,7 +874,7 @@ const mapAuditItemStatus = (status: string) => status as any;
 
 app.post('/api/assets', asyncHandler(async (req, res) => {
   const body = req.body || {};
-  const required = ['propertyNumber', 'catalogItemId', 'description', 'unitValue', 'fundClusterId', 'departmentId', 'locationId', 'status'];
+  const required = ['propertyNumber', 'catalogItemId', 'description', 'unitValue', 'fundClusterId', 'status'];
   const missing = required.filter((k) => body[k] === undefined || body[k] === null || body[k] === '');
   if (missing.length) {
     return res.status(400).json({ message: `Missing fields: ${missing.join(', ')}` });
@@ -897,9 +897,9 @@ app.post('/api/assets', asyncHandler(async (req, res) => {
       quantity: body.quantity ?? 1,
       dateAcquired: body.dateAcquired ? new Date(body.dateAcquired) : new Date(),
       fundClusterId: body.fundClusterId,
-      departmentId: body.departmentId,
+      departmentId: body.departmentId || null,
       custodianId,
-      locationId: body.locationId,
+      locationId: body.locationId || null,
       status: mapAssetStatus(body.status),
       remarks: body.remarks || null,
     },
@@ -933,9 +933,9 @@ app.put('/api/assets/:id', asyncHandler(async (req, res) => {
       quantity: body.quantity ?? existing.quantity,
       dateAcquired: body.dateAcquired ? new Date(body.dateAcquired) : existing.dateAcquired,
       fundClusterId: body.fundClusterId ?? existing.fundClusterId,
-      departmentId: body.departmentId ?? existing.departmentId,
+      departmentId: body.departmentId !== undefined ? (body.departmentId || null) : existing.departmentId,
       custodianId: body.custodianId ?? existing.custodianId,
-      locationId: body.locationId ?? existing.locationId,
+      locationId: body.locationId !== undefined ? (body.locationId || null) : existing.locationId,
       status: body.status ? mapAssetStatus(body.status) : existing.status,
       remarks: body.remarks ?? existing.remarks,
     },

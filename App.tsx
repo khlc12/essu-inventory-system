@@ -1830,8 +1830,8 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                 description: initialData.description,
                 unitValue: initialData.unitValue.toString(),
                 fundClusterId: initialData.fundClusterId,
-                departmentId: initialData.departmentId,
-                locationId: initialData.locationId,
+                departmentId: initialData.departmentId || '',
+                locationId: initialData.locationId || '',
                 custodianId: initialData.custodianId,
                 status: initialData.status
             });
@@ -1861,8 +1861,7 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
     const handleSaveAction = async () => {
         // Validation
         if (!formData.propertyNumber || !formData.dateAcquired || !formData.catalogItemId || 
-            !formData.unitValue || !formData.fundClusterId || !formData.departmentId || 
-            !formData.locationId) {
+            !formData.unitValue || !formData.fundClusterId) {
             setError('All fields are required.');
             return;
         }
@@ -1972,13 +1971,13 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                      <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-1">Unit <span className="text-red-500">*</span></label>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
                          <select 
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
                             value={formData.departmentId}
                             onChange={e => setFormData({...formData, departmentId: e.target.value})}
                          >
-                             <option value="">Select Unit...</option>
+                             <option value="">Not Set</option>
                              {selectedInactiveDept && (
                                  <option value={selectedInactiveDept.id}>{selectedInactiveDept.name} (Inactive)</option>
                              )}
@@ -1986,13 +1985,13 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                          </select>
                     </div>
                     <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-1">Location <span className="text-red-500">*</span></label>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
                          <select 
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
                             value={formData.locationId}
                             onChange={e => setFormData({...formData, locationId: e.target.value})}
                          >
-                             <option value="">Select Location...</option>
+                             <option value="">Not Set</option>
                              {locations.map((l: Location) => <option key={l.id} value={l.id}>{l.name}</option>)}
                          </select>
                     </div>
