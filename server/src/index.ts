@@ -1452,38 +1452,11 @@ app.get('/api/users', authMiddleware, asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/users', authMiddleware, asyncHandler(async (req, res) => {
-  if (!ensureRole(req, res, ['Officer'])) return;
-  const { username, password, role = 'Staff', status = 'Active' } = req.body || {};
-  if (!username || !password) {
-    return res.status(400).json({ message: 'username and password are required' });
-  }
-  const existing = await prisma.user.findUnique({ where: { username } });
-  if (existing) return res.status(400).json({ message: 'Username already exists' });
-  const created = await prisma.user.create({
-    data: { username, passwordHash: password, role, status },
-  });
-  res.status(201).json(created);
+  res.status(403).json({ message: 'User account management is disabled.' });
 }));
 
 app.put('/api/users/:id', authMiddleware, asyncHandler(async (req, res) => {
-  if (!ensureRole(req, res, ['Officer'])) return;
-  const { id } = req.params;
-  const { password, role, status } = req.body || {};
-  const user = await prisma.user.findUnique({ where: { id } });
-  if (!user) return res.status(404).json({ message: 'User not found' });
-  const currentUser = (req as any).user;
-  if (status === 'Inactive' && currentUser?.id === id) {
-    return res.status(400).json({ message: 'You cannot deactivate your own account.' });
-  }
-  const updated = await prisma.user.update({
-    where: { id },
-    data: {
-      passwordHash: password ?? user.passwordHash,
-      role: role ?? user.role,
-      status: status ?? user.status,
-    },
-  });
-  res.json(updated);
+  res.status(403).json({ message: 'User account management is disabled.' });
 }));
 
 // Maintenance (Officer only)

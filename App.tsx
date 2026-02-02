@@ -16,7 +16,6 @@ import {
   INITIAL_SETTINGS,
   INITIAL_NOTIFICATIONS
 } from './constants';
-import UserManager from './UserManager';
 import { 
   bootstrapDataFromApi, 
   createAsset, 
@@ -1304,19 +1303,6 @@ const SettingsView = ({ settings, setSettings, onSaveSettings, onLog, userRole, 
                     </div>
                 </div>
             </div>
-
-            {userRole === 'Officer' && (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                    <div className="flex items-center gap-3 mb-1">
-                        <Users className="text-[#006400]" />
-                        <div>
-                            <h3 className="font-bold text-slate-800">User Accounts</h3>
-                            <p className="text-sm text-slate-500">Create and manage staff accounts with login access.</p>
-                        </div>
-                    </div>
-                    <UserManager users={users} onCreateUser={onCreateUser} onUpdateUser={onUpdateUser} />
-                </div>
-            )}
 
             <div className="flex justify-end">
                 <button
