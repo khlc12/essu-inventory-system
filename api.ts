@@ -576,7 +576,63 @@ export const createMemorandumReceipt = async (payload: any) => {
     throw new Error(text || 'Failed to create MR');
   }
   const json = await res.json();
-  return normalizeMR(json);
+  const mr = normalizeMR(json?.mr ?? json);
+  const updatedAssets = Array.isArray(json?.updatedAssets)
+    ? json.updatedAssets.map(normalizeAsset)
+    : [];
+  return { mr, updatedAssets };
+};
+
+export const returnMemorandumReceipt = async (id: string, payload: any) => {
+  const res = await fetch(`${API_BASE_URL}/api/mrs/${id}/return`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Failed to return MR');
+  }
+  const json = await res.json();
+  return {
+    mr: normalizeMR(json?.mr ?? json),
+    updatedAssets: Array.isArray(json?.updatedAssets) ? json.updatedAssets.map(normalizeAsset) : [],
+  };
+};
+
+export const transferMemorandumReceipt = async (id: string, payload: any) => {
+  const res = await fetch(`${API_BASE_URL}/api/mrs/${id}/transfer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Failed to transfer MR');
+  }
+  const json = await res.json();
+  return {
+    mr: normalizeMR(json?.mr ?? json),
+    closedMr: json?.closedMr ? normalizeMR(json.closedMr) : null,
+    updatedAssets: Array.isArray(json?.updatedAssets) ? json.updatedAssets.map(normalizeAsset) : [],
+  };
+};
+
+export const reportMemorandumReceiptMissing = async (id: string, payload: any) => {
+  const res = await fetch(`${API_BASE_URL}/api/mrs/${id}/report-missing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'Failed to report missing assets');
+  }
+  const json = await res.json();
+  return {
+    mr: normalizeMR(json?.mr ?? json),
+    updatedAssets: Array.isArray(json?.updatedAssets) ? json.updatedAssets.map(normalizeAsset) : [],
+  };
 };
 
 // Audit sessions

@@ -134,6 +134,7 @@ export const INITIAL_DEPARTMENTS: Department[] = [
 ];
 
 export const INITIAL_EMPLOYEES: Employee[] = [
+  { id: 'SUPPLY-OFFICE', employeeId: 'SUPPLY-OFFICE', firstName: 'Supply Office', lastName: 'Custodian', middleName: '', position: 'Supply Office', departmentId: 'SUPPLY', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
   { id: '1', employeeId: 'E001', firstName: 'Jeffrey', lastName: 'Meneses', middleName: '', position: 'Admin Officer V', departmentId: 'ADMIN', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
   { id: '2', employeeId: 'E002', firstName: 'Arnel', lastName: 'Balbin', middleName: 'S', position: 'Instructor I', departmentId: 'COED', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },
   { id: '3', employeeId: 'E003', firstName: 'Sharon', lastName: 'Singzon', middleName: 'L', position: 'Dean', departmentId: 'COED', status: 'Active', createdAt: '2023-01-01T00:00:00Z' },

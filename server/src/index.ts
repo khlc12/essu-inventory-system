@@ -813,13 +813,57 @@ const mapAssetStatus = (status: string) => {
   return status as any;
 };
 
+const SUPPLY_OFFICE_EMPLOYEE_CODE = 'SUPPLY-OFFICE';
+
+const ensureSupplyOfficeEmployee = async (tx: any) => {
+  const existing = await tx.employee.findUnique({ where: { employeeId: SUPPLY_OFFICE_EMPLOYEE_CODE } });
+  if (existing) return existing;
+
+  let department = await tx.department.findFirst({
+    where: {
+      OR: [
+        { code: 'SUPPLY' },
+        { name: { contains: 'Supply', mode: 'insensitive' } },
+      ],
+    },
+  });
+
+  if (!department) {
+    department = await tx.department.create({
+      data: { code: 'SUPPLY', name: 'Supply Office', status: 'Active' },
+    });
+  }
+
+  return tx.employee.create({
+    data: {
+      employeeId: SUPPLY_OFFICE_EMPLOYEE_CODE,
+      firstName: 'Supply Office',
+      lastName: 'Custodian',
+      middleName: null,
+      position: 'Supply Office',
+      departmentId: department.id,
+      status: 'Active',
+    },
+  });
+};
+
+const normalizeCondition = (value?: string) => (value || '').trim().toLowerCase();
+
+const conditionToAssetStatus = (condition?: string) => {
+  const normalized = normalizeCondition(condition);
+  if (normalized === 'good') return 'Active';
+  if (normalized === 'for repair') return 'Under Repair';
+  if (normalized === 'unserviceable') return 'Retired';
+  return null;
+};
+
 const mapTransactionType = (type: string) => (type === 'Stock In' ? 'StockIn' : 'StockOut');
 const mapAuditSessionStatus = (status: string) => status === 'Finalized' ? 'Finalized' : 'Draft';
 const mapAuditItemStatus = (status: string) => status as any;
 
 app.post('/api/assets', asyncHandler(async (req, res) => {
   const body = req.body || {};
-  const required = ['propertyNumber', 'catalogItemId', 'description', 'unitValue', 'fundClusterId', 'departmentId', 'custodianId', 'locationId', 'status'];
+  const required = ['propertyNumber', 'catalogItemId', 'description', 'unitValue', 'fundClusterId', 'departmentId', 'locationId', 'status'];
   const missing = required.filter((k) => body[k] === undefined || body[k] === null || body[k] === '');
   if (missing.length) {
     return res.status(400).json({ message: `Missing fields: ${missing.join(', ')}` });
@@ -829,6 +873,9 @@ app.post('/api/assets', asyncHandler(async (req, res) => {
   if (existing) {
     return res.status(400).json({ message: 'Property Number must be unique.' });
   }
+
+  const supplyEmployee = await ensureSupplyOfficeEmployee(prisma);
+  const custodianId = body.custodianId || supplyEmployee.id;
 
   const created = await prisma.asset.create({
     data: {
@@ -840,7 +887,7 @@ app.post('/api/assets', asyncHandler(async (req, res) => {
       dateAcquired: body.dateAcquired ? new Date(body.dateAcquired) : new Date(),
       fundClusterId: body.fundClusterId,
       departmentId: body.departmentId,
-      custodianId: body.custodianId,
+      custodianId,
       locationId: body.locationId,
       status: mapAssetStatus(body.status),
       remarks: body.remarks || null,
@@ -973,9 +1020,12 @@ app.get('/api/mrs', asyncHandler(async (_req, res) => {
 }));
 
 app.post('/api/mrs', asyncHandler(async (req, res) => {
-  const { mrNumber, dateIssued, employeeId, departmentId, items = [], status = 'Active', remarks } = req.body || {};
-  if (!dateIssued || !employeeId || !departmentId) {
-    return res.status(400).json({ message: 'dateIssued, employeeId, and unit are required.' });
+  const { mrNumber, dateIssued, employeeId, locationId, items = [], remarks } = req.body || {};
+  if (!dateIssued || !employeeId) {
+    return res.status(400).json({ message: 'dateIssued and employeeId are required.' });
+  }
+  if (!locationId) {
+    return res.status(400).json({ message: 'locationId is required.' });
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: 'At least one asset is required.' });
@@ -986,29 +1036,273 @@ app.post('/api/mrs', asyncHandler(async (req, res) => {
     }
   }
 
-  const created = await prisma.memorandumReceipt.create({
-    data: {
-      mrNumber: mrNumber || `MR-${new Date(dateIssued).getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
-      dateIssued: new Date(dateIssued),
-      employeeId,
-      departmentId,
-      status,
-      remarks: remarks || null,
-      items: {
-        create: items.map((i: any) => ({
-          assetId: i.assetId,
-          propertyNumber: i.propertyNumber,
-          description: i.description,
-          unitValue: new Prisma.Decimal(i.unitValue),
-          remarks: i.remarks || null,
-          returnDate: i.returnDate ? new Date(i.returnDate) : null,
-        })),
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!employee) {
+    return res.status(400).json({ message: 'Custodian not found.' });
+  }
+
+  const departmentId = employee.departmentId;
+  const assetIds = items.map((i: any) => i.assetId).filter(Boolean);
+  const activeAssignments = await prisma.mRItem.findMany({
+    where: { assetId: { in: assetIds }, mr: { status: 'Active' } },
+    include: { mr: true },
+  });
+  if (activeAssignments.length) {
+    const mrNumbers = Array.from(new Set(activeAssignments.map((a) => a.mr?.mrNumber).filter(Boolean))).join(', ');
+    return res.status(409).json({ message: `Some assets already have an active MR. (${mrNumbers || 'Active MR'})` });
+  }
+
+  const assets = await prisma.asset.findMany({ where: { id: { in: assetIds } } });
+  const missingAssets = assetIds.filter((id: string) => !assets.find((a) => a.id === id));
+  if (missingAssets.length) {
+    return res.status(400).json({ message: 'One or more assets could not be found.' });
+  }
+  const inactiveAssets = assets.filter((a) => a.status !== 'Active');
+  if (inactiveAssets.length) {
+    return res.status(400).json({ message: 'Only active assets can be issued.' });
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const createdMr = await tx.memorandumReceipt.create({
+      data: {
+        mrNumber: mrNumber || `MR-${new Date(dateIssued).getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+        dateIssued: new Date(dateIssued),
+        employeeId,
+        departmentId,
+        status: 'Active',
+        remarks: remarks || null,
+        items: {
+          create: items.map((i: any) => ({
+            assetId: i.assetId,
+            propertyNumber: i.propertyNumber,
+            description: i.description,
+            unitValue: new Prisma.Decimal(i.unitValue),
+            remarks: i.remarks || null,
+            returnDate: i.returnDate ? new Date(i.returnDate) : null,
+          })),
+        },
       },
-    },
+    });
+
+    const updatedAssets = [];
+    for (const asset of assets) {
+      const updated = await tx.asset.update({
+        where: { id: asset.id },
+        data: {
+          custodianId: employeeId,
+          departmentId,
+          locationId,
+        },
+      });
+      updatedAssets.push(updated);
+    }
+
+    return { createdMr, updatedAssets };
+  });
+
+  const withRelations = await prisma.memorandumReceipt.findUnique({
+    where: { id: created.createdMr.id },
     include: { items: true, employee: true, department: true },
   });
 
-  res.status(201).json(created);
+  res.status(201).json({ mr: withRelations, updatedAssets: created.updatedAssets });
+}));
+
+app.post('/api/mrs/:id/return', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const { id } = req.params;
+  const { condition, remarks } = req.body || {};
+  const nextStatus = conditionToAssetStatus(condition);
+  if (!nextStatus) {
+    return res.status(400).json({ message: 'condition must be Good, For Repair, or Unserviceable.' });
+  }
+
+  const mr = await prisma.memorandumReceipt.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+  if (!mr) return res.status(404).json({ message: 'MR not found.' });
+  if (mr.status !== 'Active') {
+    return res.status(400).json({ message: 'MR is already closed.' });
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const supplyEmployee = await ensureSupplyOfficeEmployee(tx);
+    const supplyDept = await tx.department.findUnique({ where: { id: supplyEmployee.departmentId } });
+
+    const updatedAssets = [];
+    for (const item of mr.items) {
+      const data: any = {
+        custodianId: supplyEmployee.id,
+        departmentId: supplyEmployee.departmentId,
+        status: mapAssetStatus(nextStatus),
+      };
+      if (supplyDept?.locationId) {
+        data.locationId = supplyDept.locationId;
+      }
+      const updated = await tx.asset.update({ where: { id: item.assetId }, data });
+      updatedAssets.push(updated);
+    }
+
+    await tx.mRItem.updateMany({
+      where: { mrId: id },
+      data: { returnDate: new Date(), remarks: condition || null },
+    });
+
+    await tx.memorandumReceipt.update({
+      where: { id },
+      data: { status: 'Closed', remarks: remarks || mr.remarks || null },
+    });
+
+    return updatedAssets;
+  });
+
+  const withRelations = await prisma.memorandumReceipt.findUnique({
+    where: { id },
+    include: { items: true, employee: true, department: true },
+  });
+
+  res.json({ mr: withRelations, updatedAssets: result });
+}));
+
+app.post('/api/mrs/:id/transfer', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const { id } = req.params;
+  const { employeeId, locationId, condition, remarks } = req.body || {};
+  const nextStatus = conditionToAssetStatus(condition);
+  if (!employeeId || !locationId) {
+    return res.status(400).json({ message: 'employeeId and locationId are required.' });
+  }
+  if (!nextStatus || normalizeCondition(condition) === 'unserviceable') {
+    return res.status(400).json({ message: 'condition must be Good or For Repair for transfers.' });
+  }
+
+  const mr = await prisma.memorandumReceipt.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+  if (!mr) return res.status(404).json({ message: 'MR not found.' });
+  if (mr.status !== 'Active') {
+    return res.status(400).json({ message: 'MR is already closed.' });
+  }
+
+  const targetEmployee = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!targetEmployee) {
+    return res.status(400).json({ message: 'Target custodian not found.' });
+  }
+
+  const assetIds = mr.items.map((item) => item.assetId);
+  const otherActive = await prisma.mRItem.findMany({
+    where: { assetId: { in: assetIds }, mr: { status: 'Active', NOT: { id } } },
+    include: { mr: true },
+  });
+  if (otherActive.length) {
+    const mrNumbers = Array.from(new Set(otherActive.map((a) => a.mr?.mrNumber).filter(Boolean))).join(', ');
+    return res.status(409).json({ message: `Some assets already have an active MR. (${mrNumbers || 'Active MR'})` });
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.mRItem.updateMany({
+      where: { mrId: id },
+      data: { returnDate: new Date(), remarks: 'Transferred' },
+    });
+
+    const closedMr = await tx.memorandumReceipt.update({
+      where: { id },
+      data: { status: 'Closed', remarks: mr.remarks || null },
+    });
+
+    const newMr = await tx.memorandumReceipt.create({
+      data: {
+        mrNumber: `MR-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+        dateIssued: new Date(),
+        employeeId,
+        departmentId: targetEmployee.departmentId,
+        status: 'Active',
+        remarks: remarks || null,
+        items: {
+          create: mr.items.map((i) => ({
+            assetId: i.assetId,
+            propertyNumber: i.propertyNumber,
+            description: i.description,
+            unitValue: i.unitValue,
+          })),
+        },
+      },
+    });
+
+    const updatedAssets = [];
+    for (const item of mr.items) {
+      const updated = await tx.asset.update({
+        where: { id: item.assetId },
+        data: {
+          custodianId: employeeId,
+          departmentId: targetEmployee.departmentId,
+          locationId,
+          status: mapAssetStatus(nextStatus),
+        },
+      });
+      updatedAssets.push(updated);
+    }
+
+    return { newMr, closedMr, updatedAssets };
+  });
+
+  const withRelations = await prisma.memorandumReceipt.findUnique({
+    where: { id: result.newMr.id },
+    include: { items: true, employee: true, department: true },
+  });
+  const closedRelations = await prisma.memorandumReceipt.findUnique({
+    where: { id },
+    include: { items: true, employee: true, department: true },
+  });
+
+  res.json({ mr: withRelations, closedMr: closedRelations, updatedAssets: result.updatedAssets });
+}));
+
+app.post('/api/mrs/:id/report-missing', asyncHandler(async (req, res) => {
+  if (!ensureRole(req, res, ['Officer'])) return;
+  const { id } = req.params;
+  const { remarks } = req.body || {};
+
+  const mr = await prisma.memorandumReceipt.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+  if (!mr) return res.status(404).json({ message: 'MR not found.' });
+  if (mr.status !== 'Active') {
+    return res.status(400).json({ message: 'MR is already closed.' });
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const updatedAssets = [];
+    for (const item of mr.items) {
+      const updated = await tx.asset.update({
+        where: { id: item.assetId },
+        data: { status: 'Missing' },
+      });
+      updatedAssets.push(updated);
+    }
+
+    await tx.mRItem.updateMany({
+      where: { mrId: id },
+      data: { returnDate: new Date(), remarks: 'Missing' },
+    });
+
+    await tx.memorandumReceipt.update({
+      where: { id },
+      data: { status: 'Closed', remarks: remarks || mr.remarks || null },
+    });
+
+    return updatedAssets;
+  });
+
+  const withRelations = await prisma.memorandumReceipt.findUnique({
+    where: { id },
+    include: { items: true, employee: true, department: true },
+  });
+
+  res.json({ mr: withRelations, updatedAssets: result });
 }));
 
 app.get('/api/audits', asyncHandler(async (_req, res) => {

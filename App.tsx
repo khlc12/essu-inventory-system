@@ -43,6 +43,9 @@ import {
   deactivateEmployee,
   createTransaction,
   createMemorandumReceipt,
+  returnMemorandumReceipt,
+  transferMemorandumReceipt,
+  reportMemorandumReceiptMissing,
   createAuditSession,
   updateAuditSession,
   createActivityLog,
@@ -163,6 +166,11 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
 const formatDateTime = (dateStr: string) => new Date(dateStr).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+const SUPPLY_OFFICE_EMPLOYEE_CODE = 'SUPPLY-OFFICE';
+
+const findSupplyOfficeEmployee = (employees: Employee[]) =>
+  employees.find((e: Employee) => e.employeeId === SUPPLY_OFFICE_EMPLOYEE_CODE);
 
 const getEmployeeFullName = (e?: Employee) => {
   if (!e) return 'Unknown';
@@ -1504,19 +1512,14 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
         if (!formData.departmentId) return null;
         return departments.find((d: Department) => d.id === formData.departmentId && d.status !== 'Active') || null;
     }, [departments, formData.departmentId]);
-    const activeEmployees = useMemo(() => employees.filter((e: Employee) => e.status === 'Active'), [employees]);
-    const selectedInactiveEmployee = useMemo(() => {
-        if (!formData.custodianId) return null;
-        return employees.find((e: Employee) => e.id === formData.custodianId && e.status !== 'Active') || null;
-    }, [employees, formData.custodianId]);
-    const custodianOptions = useMemo(() => {
-        const list: SelectOption[] = [];
-        if (selectedInactiveEmployee) {
-            list.push({ value: selectedInactiveEmployee.id, label: `${getEmployeeFullName(selectedInactiveEmployee)} (Inactive)` });
-        }
-        activeEmployees.forEach((e: Employee) => list.push({ value: e.id, label: getEmployeeFullName(e) }));
-        return list;
-    }, [activeEmployees, selectedInactiveEmployee]);
+    const supplyOfficeEmployee = useMemo(() => {
+        const direct = findSupplyOfficeEmployee(employees);
+        if (direct) return direct;
+        const supplyDeptIds = departments
+            .filter((d: Department) => /supply/i.test(d.name))
+            .map((d: Department) => d.id);
+        return employees.find((e: Employee) => supplyDeptIds.includes(e.departmentId));
+    }, [employees, departments]);
 
     useEffect(() => {
         if (initialData) {
@@ -1535,6 +1538,13 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
         }
     }, [initialData]);
 
+    useEffect(() => {
+        if (initialData) return;
+        if (supplyOfficeEmployee && !formData.custodianId) {
+            setFormData((prev) => ({ ...prev, custodianId: supplyOfficeEmployee.id }));
+        }
+    }, [initialData, supplyOfficeEmployee]);
+
     const handleCatalogChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const itemId = e.target.value;
         const item = catalog.find((c: CatalogItem) => c.id === itemId);
@@ -1552,8 +1562,12 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
         // Validation
         if (!formData.propertyNumber || !formData.dateAcquired || !formData.catalogItemId || 
             !formData.unitValue || !formData.fundClusterId || !formData.departmentId || 
-            !formData.locationId || !formData.custodianId) {
+            !formData.locationId) {
             setError('All fields are required.');
+            return;
+        }
+        if (!formData.custodianId) {
+            setError('Supply Office custodian is not configured.');
             return;
         }
 
@@ -1684,14 +1698,14 @@ const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, 
                     </div>
                 </div>
                  <div>
-                     <label className="block text-sm font-medium text-slate-700 mb-1">Custodian <span className="text-red-500">*</span></label>
-                     <SearchableSelect
-                        value={formData.custodianId}
-                        options={custodianOptions}
-                        onChange={(next) => setFormData({ ...formData, custodianId: next })}
-                        placeholder="Select Employee..."
-                        className="w-full"
+                     <label className="block text-sm font-medium text-slate-700 mb-1">Custodian</label>
+                     <input
+                        type="text"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none bg-slate-50 text-slate-600"
+                        value={getEmployeeFullName(employees.find((e: Employee) => e.id === formData.custodianId) || supplyOfficeEmployee)}
+                        disabled
                      />
+                     <div className="text-xs text-slate-500 mt-1">Custodian is assigned through Memorandum Receipt issuance.</div>
                 </div>
                 
                 {initialData && (
@@ -2263,7 +2277,10 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const activeEmployees = useMemo(() => employees.filter((e: Employee) => e.status === 'Active'), [employees]);
+    const activeEmployees = useMemo(
+        () => employees.filter((e: Employee) => e.status === 'Active' && e.employeeId !== SUPPLY_OFFICE_EMPLOYEE_CODE),
+        [employees]
+    );
     const selectedInactiveCustodian = useMemo(() => {
         if (custodian === 'All') return null;
         return employees.find((e: Employee) => e.id === custodian && e.status !== 'Active') || null;
@@ -2452,12 +2469,16 @@ const MRListView = ({ mrs, onNavigate, employees }: any) => {
     );
 };
 
-const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
+const MRForm = ({ onCancel, onSave, employees, assets, locations, mrs, isSaving }: any) => {
     const [dateIssued, setDateIssued] = useState(new Date().toISOString().slice(0, 10));
     const [employeeId, setEmployeeId] = useState('');
+    const [locationId, setLocationId] = useState('');
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [error, setError] = useState('');
-    const activeEmployees = useMemo(() => employees.filter((e: Employee) => e.status === 'Active'), [employees]);
+    const activeEmployees = useMemo(
+        () => employees.filter((e: Employee) => e.status === 'Active' && e.employeeId !== SUPPLY_OFFICE_EMPLOYEE_CODE),
+        [employees]
+    );
     const selectedInactiveEmployee = useMemo(() => {
         if (!employeeId) return null;
         return employees.find((e: Employee) => e.id === employeeId && e.status !== 'Active') || null;
@@ -2471,7 +2492,16 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
         return list;
     }, [activeEmployees, selectedInactiveEmployee]);
 
-    const availableAssets = assets.filter((a: Asset) => a.status === 'Active');
+    const activeMrAssetIds = useMemo(() => {
+        const ids = new Set<string>();
+        (mrs || []).forEach((m: MemorandumReceipt) => {
+            if (m.status !== 'Active') return;
+            (m.items || []).forEach((item: MRItem) => ids.add(item.assetId));
+        });
+        return ids;
+    }, [mrs]);
+
+    const availableAssets = assets.filter((a: Asset) => a.status === 'Active' && !activeMrAssetIds.has(a.id));
 
     const toggleAsset = (id: string) => {
         setSelectedAssetIds((prev) =>
@@ -2480,8 +2510,8 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
     };
 
     const handleSubmit = async () => {
-        if (!dateIssued || !employeeId || selectedAssetIds.length === 0) {
-            setError('Date, custodian, and at least one asset are required.');
+        if (!dateIssued || !employeeId || !locationId || selectedAssetIds.length === 0) {
+            setError('Date, custodian, location, and at least one asset are required.');
             return;
         }
         setError('');
@@ -2498,6 +2528,7 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
             dateIssued,
             employeeId,
             departmentId: employees.find((e: Employee) => e.id === employeeId)?.departmentId || '',
+            locationId,
             items,
             status: 'Active',
         }).catch((err: any) => setError(err?.message || 'Failed to issue MR.'));
@@ -2511,7 +2542,7 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
         </div>
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
              {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
-             <div className="grid grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Date Issued</label>
                     <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]" value={dateIssued} onChange={(e) => setDateIssued(e.target.value)} />
@@ -2525,6 +2556,19 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
                         placeholder="Select Employee..."
                         className="w-full"
                     />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
+                    <select
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                        value={locationId}
+                        onChange={(e) => setLocationId(e.target.value)}
+                    >
+                        <option value="">Select Location...</option>
+                        {locations.map((l: Location) => (
+                            <option key={l.id} value={l.id}>{l.name}</option>
+                        ))}
+                    </select>
                  </div>
              </div>
              <div>
@@ -2551,7 +2595,28 @@ const MRForm = ({ onCancel, onSave, employees, assets, isSaving }: any) => {
     );
 };
 
-const MRDetail = ({ mr, employees, departments, onBack }: any) => {
+const MRDetail = ({ mr, employees, departments, locations, onBack, onReturn, onTransfer, onReportMissing, isSaving }: any) => {
+    const activeEmployees = useMemo(
+        () => employees.filter((e: Employee) => e.status === 'Active' && e.employeeId !== SUPPLY_OFFICE_EMPLOYEE_CODE),
+        [employees]
+    );
+    const transferEmployeeOptions = useMemo(
+        () => activeEmployees.map((e: Employee) => ({ value: e.id, label: getEmployeeFullName(e) })),
+        [activeEmployees]
+    );
+
+    const [showReturn, setShowReturn] = useState(false);
+    const [showTransfer, setShowTransfer] = useState(false);
+    const [showMissing, setShowMissing] = useState(false);
+    const [returnCondition, setReturnCondition] = useState('Good');
+    const [returnRemarks, setReturnRemarks] = useState('');
+    const [transferEmployeeId, setTransferEmployeeId] = useState('');
+    const [transferLocationId, setTransferLocationId] = useState('');
+    const [transferCondition, setTransferCondition] = useState('Good');
+    const [transferRemarks, setTransferRemarks] = useState('');
+    const [missingRemarks, setMissingRemarks] = useState('');
+    const [actionError, setActionError] = useState('');
+
     if (!mr) {
         return (
             <div className="space-y-4">
@@ -2563,6 +2628,54 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
 
     const emp = employees.find((e: Employee) => e.id === mr.employeeId);
     const dept = departments.find((d: Department) => d.id === mr.departmentId);
+
+    const handleReturnSubmit = async () => {
+        if (!returnCondition) {
+            setActionError('Return condition is required.');
+            return;
+        }
+        try {
+            setActionError('');
+            await onReturn?.({ condition: returnCondition, remarks: returnRemarks });
+            setShowReturn(false);
+            setReturnRemarks('');
+        } catch (err: any) {
+            setActionError(err?.message || 'Failed to return assets.');
+        }
+    };
+
+    const handleTransferSubmit = async () => {
+        if (!transferEmployeeId || !transferLocationId) {
+            setActionError('Target custodian and location are required.');
+            return;
+        }
+        try {
+            setActionError('');
+            await onTransfer?.({
+                employeeId: transferEmployeeId,
+                locationId: transferLocationId,
+                condition: transferCondition,
+                remarks: transferRemarks,
+            });
+            setShowTransfer(false);
+            setTransferEmployeeId('');
+            setTransferLocationId('');
+            setTransferRemarks('');
+        } catch (err: any) {
+            setActionError(err?.message || 'Failed to transfer assets.');
+        }
+    };
+
+    const handleMissingSubmit = async () => {
+        try {
+            setActionError('');
+            await onReportMissing?.({ remarks: missingRemarks });
+            setShowMissing(false);
+            setMissingRemarks('');
+        } catch (err: any) {
+            setActionError(err?.message || 'Failed to report missing assets.');
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -2578,6 +2691,29 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
                 <h1 className="text-center text-xl font-bold uppercase mb-8">
                     Memorandum Receipt for Property, Plant and Equipment
                 </h1>
+
+                {mr.status === 'Active' && (
+                    <div className="flex flex-wrap justify-end gap-2 mb-6 print:hidden">
+                        <button
+                            onClick={() => { setActionError(''); setShowReturn(true); }}
+                            className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:border-[#006400] hover:text-[#006400]"
+                        >
+                            Return
+                        </button>
+                        <button
+                            onClick={() => { setActionError(''); setShowTransfer(true); }}
+                            className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:border-blue-500 hover:text-blue-600"
+                        >
+                            Transfer Custodian
+                        </button>
+                        <button
+                            onClick={() => { setActionError(''); setShowMissing(true); }}
+                            className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:border-red-500 hover:text-red-600"
+                        >
+                            Report Missing
+                        </button>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-8 text-sm mb-6">
                     <div>
@@ -2644,6 +2780,138 @@ const MRDetail = ({ mr, employees, departments, onBack }: any) => {
                     </button>
                 </div>
             </div>
+
+            {showReturn && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">Return Assets</h3>
+                            <button onClick={() => setShowReturn(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {actionError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{actionError}</div>}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Condition</label>
+                                <select
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                    value={returnCondition}
+                                    onChange={(e) => setReturnCondition(e.target.value)}
+                                >
+                                    <option value="Good">Good</option>
+                                    <option value="For Repair">For Repair</option>
+                                    <option value="Unserviceable">Unserviceable</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Remarks (Optional)</label>
+                                <textarea
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                    rows={3}
+                                    value={returnRemarks}
+                                    onChange={(e) => setReturnRemarks(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+                            <button onClick={() => setShowReturn(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg" disabled={isSaving}>Cancel</button>
+                            <button onClick={handleReturnSubmit} className={`px-4 py-2 rounded-lg text-white ${isSaving ? 'bg-slate-400' : 'bg-[#006400] hover:bg-[#004d00]'}`} disabled={isSaving}>Confirm Return</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showTransfer && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">Transfer Custodian</h3>
+                            <button onClick={() => setShowTransfer(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {actionError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{actionError}</div>}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">New Custodian</label>
+                                    <SearchableSelect
+                                        value={transferEmployeeId}
+                                        options={transferEmployeeOptions}
+                                        onChange={setTransferEmployeeId}
+                                        placeholder="Select Employee..."
+                                        className="w-full"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
+                                    <select
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                        value={transferLocationId}
+                                        onChange={(e) => setTransferLocationId(e.target.value)}
+                                    >
+                                        <option value="">Select Location...</option>
+                                        {locations.map((l: Location) => (
+                                            <option key={l.id} value={l.id}>{l.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Condition</label>
+                                <select
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                    value={transferCondition}
+                                    onChange={(e) => setTransferCondition(e.target.value)}
+                                >
+                                    <option value="Good">Good</option>
+                                    <option value="For Repair">For Repair</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Remarks (Optional)</label>
+                                <textarea
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                    rows={3}
+                                    value={transferRemarks}
+                                    onChange={(e) => setTransferRemarks(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+                            <button onClick={() => setShowTransfer(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg" disabled={isSaving}>Cancel</button>
+                            <button onClick={handleTransferSubmit} className={`px-4 py-2 rounded-lg text-white ${isSaving ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`} disabled={isSaving}>Confirm Transfer</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showMissing && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800">Report Missing</h3>
+                            <button onClick={() => setShowMissing(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {actionError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{actionError}</div>}
+                            <div className="text-sm text-slate-600">
+                                This will mark all assets in this MR as Missing and close the MR.
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Remarks (Optional)</label>
+                                <textarea
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-[#006400]"
+                                    rows={3}
+                                    value={missingRemarks}
+                                    onChange={(e) => setMissingRemarks(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+                            <button onClick={() => setShowMissing(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg" disabled={isSaving}>Cancel</button>
+                            <button onClick={handleMissingSubmit} className={`px-4 py-2 rounded-lg text-white ${isSaving ? 'bg-slate-400' : 'bg-red-600 hover:bg-red-700'}`} disabled={isSaving}>Confirm Missing</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -5044,6 +5312,7 @@ const App = () => {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedMR, setSelectedMR] = useState<MemorandumReceipt | null>(null);
   const [isSavingMR, setIsSavingMR] = useState(false);
+  const [isSavingMRAction, setIsSavingMRAction] = useState(false);
   const [isSavingAudit, setIsSavingAudit] = useState(false);
   const userRole = auth?.user.role || 'Officer';
   const isSsoUser = auth?.user.authMethod === 'sso';
@@ -5291,8 +5560,15 @@ const App = () => {
   const handleMRSave = async (data: any) => {
       setIsSavingMR(true);
       try {
-          const created = await createMemorandumReceipt(data);
+          const result = await createMemorandumReceipt(data);
+          const created = result.mr;
           setMrs([created, ...mrs]);
+          if (result.updatedAssets?.length) {
+              setAssets((prev) => prev.map((asset) => {
+                  const updated = result.updatedAssets.find((a: Asset) => a.id === asset.id);
+                  return updated || asset;
+              }));
+          }
           handleLog('Issued MR', 'Memorandum Receipt', `Issued ${created.mrNumber}`, created.id);
           setSuccessMessage('Memorandum Receipt issued successfully.');
           setView('mr-list');
@@ -5301,6 +5577,87 @@ const App = () => {
           throw err;
       } finally {
           setIsSavingMR(false);
+      }
+  };
+
+  const handleMRReturn = async (mrId?: string, payload?: any) => {
+      if (!mrId) return;
+      setIsSavingMRAction(true);
+      try {
+          const result = await returnMemorandumReceipt(mrId, payload);
+          if (result?.mr) {
+              setMrs((prev) => prev.map((m: MemorandumReceipt) => (m.id === result.mr.id ? result.mr : m)));
+              setSelectedMR(result.mr);
+              handleLog('Returned MR', 'Memorandum Receipt', `Returned ${result.mr.mrNumber}`, result.mr.id);
+          }
+          if (result.updatedAssets?.length) {
+              setAssets((prev) => prev.map((asset) => {
+                  const updated = result.updatedAssets.find((a: Asset) => a.id === asset.id);
+                  return updated || asset;
+              }));
+          }
+          setSuccessMessage('Assets returned successfully.');
+      } catch (err: any) {
+          setDataError(err?.message || 'Failed to return assets.');
+          throw err;
+      } finally {
+          setIsSavingMRAction(false);
+      }
+  };
+
+  const handleMRTransfer = async (mrId?: string, payload?: any) => {
+      if (!mrId) return;
+      setIsSavingMRAction(true);
+      try {
+          const result = await transferMemorandumReceipt(mrId, payload);
+          const newMr = result?.mr;
+          const closedMr = result?.closedMr;
+          if (newMr) {
+              setMrs((prev) => {
+                  const updated = prev.map((m: MemorandumReceipt) => (closedMr && m.id === closedMr.id ? closedMr : m));
+                  return [newMr, ...updated.filter((m: MemorandumReceipt) => m.id !== newMr.id)];
+              });
+              setSelectedMR(newMr);
+              setView('mr-detail');
+              handleLog('Transferred MR', 'Memorandum Receipt', `Transferred to ${newMr.mrNumber}`, newMr.id);
+          }
+          if (result.updatedAssets?.length) {
+              setAssets((prev) => prev.map((asset) => {
+                  const updated = result.updatedAssets.find((a: Asset) => a.id === asset.id);
+                  return updated || asset;
+              }));
+          }
+          setSuccessMessage('Assets transferred successfully.');
+      } catch (err: any) {
+          setDataError(err?.message || 'Failed to transfer assets.');
+          throw err;
+      } finally {
+          setIsSavingMRAction(false);
+      }
+  };
+
+  const handleMRReportMissing = async (mrId?: string, payload?: any) => {
+      if (!mrId) return;
+      setIsSavingMRAction(true);
+      try {
+          const result = await reportMemorandumReceiptMissing(mrId, payload);
+          if (result?.mr) {
+              setMrs((prev) => prev.map((m: MemorandumReceipt) => (m.id === result.mr.id ? result.mr : m)));
+              setSelectedMR(result.mr);
+              handleLog('Reported Missing', 'Memorandum Receipt', `Reported missing for ${result.mr.mrNumber}`, result.mr.id);
+          }
+          if (result.updatedAssets?.length) {
+              setAssets((prev) => prev.map((asset) => {
+                  const updated = result.updatedAssets.find((a: Asset) => a.id === asset.id);
+                  return updated || asset;
+              }));
+          }
+          setSuccessMessage('Assets marked as missing.');
+      } catch (err: any) {
+          setDataError(err?.message || 'Failed to report missing assets.');
+          throw err;
+      } finally {
+          setIsSavingMRAction(false);
       }
   };
 
@@ -5599,8 +5956,20 @@ const App = () => {
                   setView(view);
               }
           }} />;
-          case 'mr-new': return <MRForm onSave={handleMRSave} onCancel={() => setView('mr-list')} employees={employees} assets={assets} isSaving={isSavingMR} />;
-          case 'mr-detail': return <MRDetail mr={selectedMR} employees={employees} departments={departments} onBack={() => { setSelectedMR(null); setView('mr-list'); }} />;
+          case 'mr-new': return <MRForm onSave={handleMRSave} onCancel={() => setView('mr-list')} employees={employees} assets={assets} locations={locations} mrs={mrs} isSaving={isSavingMR} />;
+          case 'mr-detail': return (
+              <MRDetail
+                  mr={selectedMR}
+                  employees={employees}
+                  departments={departments}
+                  locations={locations}
+                  isSaving={isSavingMRAction}
+                  onBack={() => { setSelectedMR(null); setView('mr-list'); }}
+                  onReturn={(payload: any) => handleMRReturn(selectedMR?.id, payload)}
+                  onTransfer={(payload: any) => handleMRTransfer(selectedMR?.id, payload)}
+                  onReportMissing={(payload: any) => handleMRReportMissing(selectedMR?.id, payload)}
+              />
+          );
 
           case 'audit-list': 
               return <AuditList 
