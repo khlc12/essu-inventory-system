@@ -468,6 +468,25 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'No HRMS access token available. Please sign in via SSO first.' });
   }
 
+  const allowedUnitTypes = new Set(['college', 'office']);
+  const normalizeUnitType = (value: any) => String(value || '').trim().toLowerCase();
+
+  const unitsUrl = new URL(`${hrmsBaseUrl.replace(/\/$/, '')}/api/units`);
+  unitsUrl.searchParams.set('include_deleted', 'true');
+  const unitsResponse = await fetch(unitsUrl.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!unitsResponse.ok) {
+    const text = await unitsResponse.text();
+    return res.status(502).json({ message: text || 'HRMS unit request failed.' });
+  }
+  const unitsPayload = await unitsResponse.json();
+  const unitsData = Array.isArray(unitsPayload?.data) ? unitsPayload.data : Array.isArray(unitsPayload) ? unitsPayload : [];
+  const unitById = new Map(unitsData.map((unit: any) => [String(unit?.id), unit]));
+
   const existingEmployees = await prisma.employee.findMany({ select: { employeeId: true } });
   const existingById = new Set(existingEmployees.map((e) => e.employeeId));
 
@@ -486,7 +505,25 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
     return candidate;
   };
 
+  const resolveUnitForDepartment = (hrUnit: any) => {
+    if (!hrUnit) return null;
+    if (typeof hrUnit === 'string') return { name: hrUnit };
+    const unitType = normalizeUnitType(hrUnit?.unit_type || hrUnit?.type || hrUnit?.unitType);
+    if (unitType === 'program') {
+      const parentId = hrUnit?.parent_unit_id || hrUnit?.parentUnitId || hrUnit?.parent_id;
+      if (!parentId) return null;
+      const parent = unitById.get(String(parentId));
+      if (!parent) return null;
+      const parentType = normalizeUnitType(parent?.unit_type || parent?.type || parent?.unitType);
+      if (parentType && !allowedUnitTypes.has(parentType)) return null;
+      return parent;
+    }
+    if (unitType && !allowedUnitTypes.has(unitType)) return null;
+    return hrUnit;
+  };
+
   const ensureDepartment = async (hrUnit: any) => {
+    if (!hrUnit) return null;
     const code = String(hrUnit?.code || '').trim();
     const nameValue = typeof hrUnit === 'string' ? hrUnit : hrUnit?.name;
     const name = String(nameValue || '').trim();
@@ -553,7 +590,8 @@ app.post('/api/hrms/employees/sync', asyncHandler(async (req, res) => {
         skipped += 1;
         continue;
       }
-      const dept = await ensureDepartment(emp.unit);
+      const resolvedUnit = resolveUnitForDepartment(emp.unit);
+      const dept = await ensureDepartment(resolvedUnit);
       if (!dept) {
         skipped += 1;
         continue;
@@ -640,7 +678,13 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
   }
 
   const payload = await response.json();
-  const data = payload?.data || payload || [];
+  const rawData = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+  const allowedUnitTypes = new Set(['college', 'office']);
+  const normalizeUnitType = (value: any) => String(value || '').trim().toLowerCase();
+  const data = rawData.filter((unit: any) => {
+    const unitType = normalizeUnitType(unit?.unit_type || unit?.type || unit?.unitType);
+    return allowedUnitTypes.has(unitType);
+  });
 
   const existing = await prisma.department.findMany({ select: { id: true, code: true, name: true } });
   const byCode = new Map(existing.map((d) => [d.code.toLowerCase(), d]));
@@ -666,7 +710,7 @@ app.post('/api/hrms/departments/sync', asyncHandler(async (req, res) => {
   let updated = 0;
   let inactivated = 0;
   let processed = 0;
-  let skipped = 0;
+  let skipped = rawData.length - data.length;
 
   for (const dept of data) {
     const name = String(dept?.name || '').trim();
