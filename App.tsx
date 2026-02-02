@@ -3855,7 +3855,7 @@ const AuditReport = ({ audit, assets, funds = [], employees = [] }: any) => {
 };
 
 // --- Master Data Views ---
-const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userRole }: any) => {
+const EmployeeMasterView = ({ employees, setEmployees, departments, assets = [], locations = [], mrs = [], onLog, userRole }: any) => {
     const confirm = useContext(ConfirmContext);
     const success = useContext(SuccessContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -3874,6 +3874,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
     const [showInactive, setShowInactive] = useState(false);
     const [error, setError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
     const isReadOnly = true;
     const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
     const selectedInactiveDept = useMemo(() => {
@@ -3972,6 +3973,53 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
         return matchesSearch && matchesDept && matchesStatus;
     });
 
+    const assetById = useMemo(() => new Map(assets.map((a: Asset) => [a.id, a])), [assets]);
+    const locationById = useMemo(() => new Map(locations.map((l: Location) => [l.id, l])), [locations]);
+
+    const employeeMrs = useMemo(() => {
+        if (!selectedEmployee) return [];
+        return (mrs || []).filter((m: MemorandumReceipt) => m.employeeId === selectedEmployee.id);
+    }, [mrs, selectedEmployee]);
+    const currentMrItems = useMemo(() => {
+        return employeeMrs
+            .filter((m: MemorandumReceipt) => m.status === 'Active')
+            .flatMap((m: MemorandumReceipt) => (m.items || []).map((item: any) => ({ mr: m, item })));
+    }, [employeeMrs]);
+    const returnItems = useMemo(() => {
+        return employeeMrs.flatMap((m: MemorandumReceipt) =>
+            (m.items || [])
+                .filter((item: any) => item.returnDate && !['Transferred', 'Missing'].includes(String(item.remarks || '')))
+                .map((item: any) => ({ mr: m, item }))
+        );
+    }, [employeeMrs]);
+    const transferItems = useMemo(() => {
+        return employeeMrs.flatMap((m: MemorandumReceipt) =>
+            (m.items || []).filter((item: any) => String(item.remarks || '') === 'Transferred').map((item: any) => ({ mr: m, item }))
+        );
+    }, [employeeMrs]);
+    const missingItems = useMemo(() => {
+        return employeeMrs.flatMap((m: MemorandumReceipt) =>
+            (m.items || []).filter((item: any) => String(item.remarks || '') === 'Missing').map((item: any) => ({ mr: m, item }))
+        );
+    }, [employeeMrs]);
+    const totalIssued = useMemo(() => employeeMrs.reduce((sum: number, m: MemorandumReceipt) => sum + (m.items?.length || 0), 0), [employeeMrs]);
+    const lastActivity = useMemo(() => {
+        const timestamps: number[] = [];
+        employeeMrs.forEach((m: MemorandumReceipt) => {
+            if (m.dateIssued) timestamps.push(new Date(m.dateIssued).getTime());
+            (m.items || []).forEach((item: any) => {
+                if (item.returnDate) timestamps.push(new Date(item.returnDate).getTime());
+            });
+        });
+        if (!timestamps.length) return null;
+        return new Date(Math.max(...timestamps));
+    }, [employeeMrs]);
+
+    const openEmployeeDrawer = (emp: Employee) => {
+        setSelectedEmployee(emp);
+    };
+    const closeEmployeeDrawer = () => setSelectedEmployee(null);
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -4026,7 +4074,7 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {filteredEmployees.map((e: Employee) => (
-                            <tr key={e.id} className="hover:bg-slate-50">
+                            <tr key={e.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => openEmployeeDrawer(e)}>
                                 <td className="px-6 py-3 font-medium text-slate-700">{e.employeeId}</td>
                                 <td className="px-6 py-3 text-[#006400] font-medium">{getEmployeeFullName(e)}</td>
                                 <td className="px-6 py-3 text-slate-600">{e.position || '-'}</td>
@@ -4046,6 +4094,189 @@ const EmployeeMasterView = ({ employees, setEmployees, departments, onLog, userR
                 </table>
                 </div>
             </div>
+
+            {selectedEmployee && (
+                <div className="fixed inset-0 z-50">
+                    <div className="absolute inset-0 bg-black/40" onClick={closeEmployeeDrawer}></div>
+                    <div className="absolute right-0 top-0 h-full w-full max-w-3xl bg-white shadow-xl flex flex-col">
+                        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                            <div>
+                                <div className="text-lg font-semibold text-slate-800">{getEmployeeFullName(selectedEmployee)}</div>
+                                <div className="text-sm text-slate-500">
+                                    {selectedEmployee.employeeId} · {selectedEmployee.position || 'Position not set'} · {departments.find((d: any) => d.id === selectedEmployee.departmentId)?.name || 'Unit not set'}
+                                </div>
+                            </div>
+                            <button onClick={closeEmployeeDrawer} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-6">
+                            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                    <div className="text-xs text-slate-500">Active Assets</div>
+                                    <div className="text-lg font-semibold text-slate-800">{currentMrItems.length}</div>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                    <div className="text-xs text-slate-500">Total Issued</div>
+                                    <div className="text-lg font-semibold text-slate-800">{totalIssued}</div>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                    <div className="text-xs text-slate-500">Returns</div>
+                                    <div className="text-lg font-semibold text-slate-800">{returnItems.length}</div>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                    <div className="text-xs text-slate-500">Transfers</div>
+                                    <div className="text-lg font-semibold text-slate-800">{transferItems.length}</div>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                    <div className="text-xs text-slate-500">Last Activity</div>
+                                    <div className="text-sm font-semibold text-slate-800">{lastActivity ? formatDateTime(lastActivity.toISOString()) : '—'}</div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="text-sm font-semibold text-slate-700">Current Assets</div>
+                                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                    <table className="w-full min-w-[720px] text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-3">Property No.</th>
+                                                <th className="px-4 py-3">Item</th>
+                                                <th className="px-4 py-3">MR No.</th>
+                                                <th className="px-4 py-3">Date Issued</th>
+                                                <th className="px-4 py-3">Location</th>
+                                                <th className="px-4 py-3">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {currentMrItems.map(({ mr, item }: any) => {
+                                                const asset = assetById.get(item.assetId);
+                                                const location = asset ? locationById.get(asset.locationId) : null;
+                                                return (
+                                                    <tr key={`${mr.id}-${item.assetId}`}>
+                                                        <td className="px-4 py-3 font-medium text-slate-700">{item.propertyNumber || asset?.propertyNumber || '-'}</td>
+                                                        <td className="px-4 py-3 text-slate-600">{item.description || asset?.description || '-'}</td>
+                                                        <td className="px-4 py-3 text-slate-600">{mr.mrNumber}</td>
+                                                        <td className="px-4 py-3 text-slate-500">{formatDate(mr.dateIssued)}</td>
+                                                        <td className="px-4 py-3 text-slate-500">{location?.name || '-'}</td>
+                                                        <td className="px-4 py-3 text-slate-600">{asset?.status || 'Active'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {currentMrItems.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">No active assets.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="text-sm font-semibold text-slate-700">Returns</div>
+                                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                    <table className="w-full min-w-[720px] text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-3">Property No.</th>
+                                                <th className="px-4 py-3">Item</th>
+                                                <th className="px-4 py-3">MR No.</th>
+                                                <th className="px-4 py-3">Returned On</th>
+                                                <th className="px-4 py-3">Condition</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {returnItems.map(({ mr, item }: any) => (
+                                                <tr key={`return-${mr.id}-${item.assetId}`}>
+                                                    <td className="px-4 py-3 font-medium text-slate-700">{item.propertyNumber}</td>
+                                                    <td className="px-4 py-3 text-slate-600">{item.description || '-'}</td>
+                                                    <td className="px-4 py-3 text-slate-600">{mr.mrNumber}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{item.returnDate ? formatDate(item.returnDate) : '-'}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{item.remarks || 'Returned'}</td>
+                                                </tr>
+                                            ))}
+                                            {returnItems.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400">No returns recorded.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="text-sm font-semibold text-slate-700">Transfers</div>
+                                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                    <table className="w-full min-w-[720px] text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-3">Property No.</th>
+                                                <th className="px-4 py-3">Item</th>
+                                                <th className="px-4 py-3">MR No.</th>
+                                                <th className="px-4 py-3">Transfer Date</th>
+                                                <th className="px-4 py-3">Current Custodian</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {transferItems.map(({ mr, item }: any) => {
+                                                const asset = assetById.get(item.assetId);
+                                                const custodian = employees.find((e: Employee) => e.id === asset?.custodianId);
+                                                return (
+                                                    <tr key={`transfer-${mr.id}-${item.assetId}`}>
+                                                        <td className="px-4 py-3 font-medium text-slate-700">{item.propertyNumber}</td>
+                                                        <td className="px-4 py-3 text-slate-600">{item.description || '-'}</td>
+                                                        <td className="px-4 py-3 text-slate-600">{mr.mrNumber}</td>
+                                                        <td className="px-4 py-3 text-slate-500">{item.returnDate ? formatDate(item.returnDate) : '-'}</td>
+                                                        <td className="px-4 py-3 text-slate-500">{custodian ? getEmployeeFullName(custodian) : '-'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {transferItems.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400">No transfers recorded.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="text-sm font-semibold text-slate-700">Missing Reports</div>
+                                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                    <table className="w-full min-w-[720px] text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-3">Property No.</th>
+                                                <th className="px-4 py-3">Item</th>
+                                                <th className="px-4 py-3">MR No.</th>
+                                                <th className="px-4 py-3">Reported On</th>
+                                                <th className="px-4 py-3">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {missingItems.map(({ mr, item }: any) => (
+                                                <tr key={`missing-${mr.id}-${item.assetId}`}>
+                                                    <td className="px-4 py-3 font-medium text-slate-700">{item.propertyNumber}</td>
+                                                    <td className="px-4 py-3 text-slate-600">{item.description || '-'}</td>
+                                                    <td className="px-4 py-3 text-slate-600">{mr.mrNumber}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{item.returnDate ? formatDate(item.returnDate) : '-'}</td>
+                                                    <td className="px-4 py-3 text-slate-500">Missing</td>
+                                                </tr>
+                                            ))}
+                                            {missingItems.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400">No missing reports.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -6379,7 +6610,7 @@ const App = () => {
                   return <AuditReport audit={activeAudit} assets={assets} funds={funds} employees={employees} />;
               }
 
-          case 'mdm-employees': return <EmployeeMasterView employees={employees} setEmployees={setEmployees} departments={departments} onLog={handleLog} userRole={userRole} />;
+          case 'mdm-employees': return <EmployeeMasterView employees={employees} setEmployees={setEmployees} departments={departments} assets={assets} locations={locations} mrs={mrs} onLog={handleLog} userRole={userRole} />;
           case 'mdm-departments': return <DepartmentMasterView departments={departments} setDepartments={setDepartments} locations={locations} onLog={handleLog} userRole={userRole} />;
           case 'mdm-locations': return <LocationMasterView locations={locations} setLocations={setLocations} onLog={handleLog} userRole={userRole} />;
           case 'mdm-funds': return <FundClusterMasterView funds={funds} setFunds={setFunds} onLog={handleLog} userRole={userRole} />;
