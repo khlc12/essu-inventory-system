@@ -1611,6 +1611,16 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
         const years = new Set(assets.map((a: Asset) => new Date(a.dateAcquired).getFullYear()));
         return Array.from(years).sort((a: any, b: any) => b - a);
     }, [assets]);
+    const fromYearOptions = useMemo(() => {
+        if (!filterYearTo) return availableYears;
+        const limit = Number(filterYearTo);
+        return availableYears.filter((y: any) => Number(y) <= limit);
+    }, [availableYears, filterYearTo]);
+    const toYearOptions = useMemo(() => {
+        if (!filterYearFrom) return availableYears;
+        const limit = Number(filterYearFrom);
+        return availableYears.filter((y: any) => Number(y) >= limit);
+    }, [availableYears, filterYearFrom]);
 
     const filteredAssets = useMemo(() => {
         return assets.filter((a: Asset) => {
@@ -1708,7 +1718,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
                         onChange={(e) => setFilterYearFrom(e.target.value)}
                     >
                         <option value="">From Year</option>
-                        {availableYears.map((y: any) => (
+                        {fromYearOptions.map((y: any) => (
                             <option key={`from-${y}`} value={y}>
                                 {y}
                             </option>
@@ -1720,7 +1730,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
                         onChange={(e) => setFilterYearTo(e.target.value)}
                     >
                         <option value="">To Year</option>
-                        {availableYears.map((y: any) => (
+                        {toYearOptions.map((y: any) => (
                             <option key={`to-${y}`} value={y}>
                                 {y}
                             </option>
