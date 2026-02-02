@@ -823,10 +823,21 @@ const ensureSupplyOfficeEmployee = async (tx: any) => {
     where: {
       OR: [
         { code: 'SUPPLY' },
-        { name: { contains: 'Supply', mode: 'insensitive' } },
+        { name: { contains: 'Supply' } },
       ],
     },
   });
+
+  if (!department) {
+    department = await tx.department.findFirst({
+      where: {
+        OR: [
+          { code: 'supply' },
+          { name: { contains: 'supply' } },
+        ],
+      },
+    });
+  }
 
   if (!department) {
     department = await tx.department.create({
