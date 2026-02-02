@@ -1598,7 +1598,8 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterDept, setFilterDept] = useState('All');
     const [filterLoc, setFilterLoc] = useState('All');
-    const [filterYear, setFilterYear] = useState('All');
+    const [filterYearFrom, setFilterYearFrom] = useState('');
+    const [filterYearTo, setFilterYearTo] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const activeDepartments = useMemo(() => departments.filter((d: Department) => d.status === 'Active'), [departments]);
     const selectedInactiveDept = useMemo(() => {
@@ -1616,7 +1617,12 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
             const matchesStatus = filterStatus === 'All' || a.status === filterStatus;
             const matchesDept = filterDept === 'All' || a.departmentId === filterDept;
             const matchesLoc = filterLoc === 'All' || a.locationId === filterLoc;
-            const matchesYear = filterYear === 'All' || new Date(a.dateAcquired).getFullYear().toString() === filterYear.toString();
+            const assetYear = new Date(a.dateAcquired).getFullYear();
+            const fromYear = filterYearFrom ? Number(filterYearFrom) : null;
+            const toYear = filterYearTo ? Number(filterYearTo) : null;
+            const startYear = fromYear !== null && toYear !== null && fromYear > toYear ? toYear : fromYear;
+            const endYear = fromYear !== null && toYear !== null && fromYear > toYear ? fromYear : toYear;
+            const matchesYear = (!startYear || assetYear >= startYear) && (!endYear || assetYear <= endYear);
 
             const item = catalog.find((c: CatalogItem) => c.id === a.catalogItemId);
             const itemName = item ? item.article.toLowerCase() : '';
@@ -1625,7 +1631,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
 
             return matchesStatus && matchesDept && matchesLoc && matchesYear && matchesSearch;
         });
-    }, [assets, filterStatus, filterDept, filterLoc, filterYear, searchTerm, catalog]);
+    }, [assets, filterStatus, filterDept, filterLoc, filterYearFrom, filterYearTo, searchTerm, catalog]);
 
     const handleEdit = (asset: Asset) => {
         onNavigate('asset-edit', asset);
@@ -1695,14 +1701,32 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
                         </option>
                     ))}
                 </select>
-                <select className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]" value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
-                    <option value="All">All Years</option>
-                    {availableYears.map((y: any) => (
-                        <option key={y} value={y}>
-                            {y}
-                        </option>
-                    ))}
-                </select>
+                <div className="flex gap-2 items-center">
+                    <select
+                        className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={filterYearFrom}
+                        onChange={(e) => setFilterYearFrom(e.target.value)}
+                    >
+                        <option value="">From Year</option>
+                        {availableYears.map((y: any) => (
+                            <option key={`from-${y}`} value={y}>
+                                {y}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        className="px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#006400]"
+                        value={filterYearTo}
+                        onChange={(e) => setFilterYearTo(e.target.value)}
+                    >
+                        <option value="">To Year</option>
+                        {availableYears.map((y: any) => (
+                            <option key={`to-${y}`} value={y}>
+                                {y}
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
