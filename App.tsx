@@ -484,14 +484,21 @@ const StockMovementChart = ({ transactions, departments }: { transactions: Trans
 };
 
 // --- Reports Module ---
-const ReportsModule = ({ assets, catalog, transactions, audits, departments, locations, categories }: any) => {
-    const [activeTab, setActiveTab] = useState<'ppe' | 'consumables' | 'movement' | 'audit'>('ppe');
+const ReportsModule = ({ assets, catalog, transactions, audits, departments, locations, categories, mrs, employees }: any) => {
+    const [activeTab, setActiveTab] = useState<'ppe' | 'consumables' | 'movement' | 'audit' | 'custody'>('ppe');
     const [filters, setFilters] = useState({
         startDate: '',
         endDate: '',
         department: 'All',
         category: 'All',
         status: 'Active'
+    });
+    const [summaryFilters, setSummaryFilters] = useState({
+        startDate: '',
+        endDate: '',
+        department: 'All',
+        location: 'All',
+        custodian: 'All',
     });
 
     const filteredPPE = useMemo(() => {
@@ -519,6 +526,179 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
         ).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [transactions, departments, catalog]);
 
+    const assetById = useMemo(() => new Map(assets.map((a: Asset) => [a.id, a])), [assets]);
+    const supplyOfficeEmployee = useMemo(() => findSupplyOfficeEmployee(employees), [employees]);
+
+    const inDateRange = (dateValue: string | undefined, start: string, end: string) => {
+        if (!dateValue) return false;
+        const ts = new Date(dateValue).getTime();
+        if (Number.isNaN(ts)) return false;
+        const afterStart = start ? ts >= new Date(start).getTime() : true;
+        const beforeEnd = end ? ts <= new Date(end).getTime() : true;
+        return afterStart && beforeEnd;
+    };
+
+    const assetsInScope = useMemo(() => {
+        return assets.filter((a: Asset) => {
+            if (summaryFilters.department !== 'All' && a.departmentId !== summaryFilters.department) return false;
+            if (summaryFilters.location !== 'All' && a.locationId !== summaryFilters.location) return false;
+            if (summaryFilters.custodian !== 'All' && a.custodianId !== summaryFilters.custodian) return false;
+            if (summaryFilters.startDate || summaryFilters.endDate) {
+                if (!inDateRange(a.dateAcquired, summaryFilters.startDate, summaryFilters.endDate)) return false;
+            }
+            return true;
+        });
+    }, [assets, summaryFilters]);
+
+    const activeMrAssetIds = useMemo(() => {
+        const ids = new Set<string>();
+        (mrs || []).forEach((m: MemorandumReceipt) => {
+            if (m.status !== 'Active') return;
+            (m.items || []).forEach((item: MRItem) => ids.add(item.assetId));
+        });
+        return ids;
+    }, [mrs]);
+
+    const custodySummary = useMemo(() => {
+        const inCustody = assetsInScope.filter((a: Asset) => activeMrAssetIds.has(a.id));
+        const available = assetsInScope.filter((a: Asset) => {
+            if (a.status !== 'Active') return false;
+            if (activeMrAssetIds.has(a.id)) return false;
+            if (supplyOfficeEmployee) return a.custodianId === supplyOfficeEmployee.id;
+            return true;
+        });
+        const missing = assetsInScope.filter((a: Asset) => a.status === 'Missing');
+        const underRepair = assetsInScope.filter((a: Asset) => a.status === 'Under Repair');
+        const retired = assetsInScope.filter((a: Asset) => a.status === 'Retired');
+
+        const sumValue = (list: Asset[]) => list.reduce((sum, a) => sum + (a.unitValue || 0), 0);
+
+        return {
+            inCustodyCount: inCustody.length,
+            inCustodyValue: sumValue(inCustody),
+            availableCount: available.length,
+            availableValue: sumValue(available),
+            missingCount: missing.length,
+            missingValue: sumValue(missing),
+            repairCount: underRepair.length,
+            repairValue: sumValue(underRepair),
+            retiredCount: retired.length,
+            retiredValue: sumValue(retired),
+        };
+    }, [assetsInScope, activeMrAssetIds, supplyOfficeEmployee]);
+
+    const mrIssuedSummary = useMemo(() => {
+        const filteredMrs = (mrs || []).filter((m: MemorandumReceipt) => {
+            if (summaryFilters.department !== 'All' && m.departmentId !== summaryFilters.department) return false;
+            if (summaryFilters.custodian !== 'All' && m.employeeId !== summaryFilters.custodian) return false;
+            if (summaryFilters.startDate || summaryFilters.endDate) {
+                if (!inDateRange(m.dateIssued, summaryFilters.startDate, summaryFilters.endDate)) return false;
+            }
+            return true;
+        });
+        const sumValue = (list: MemorandumReceipt[]) =>
+            list.reduce((sum, m) => sum + (m.items || []).reduce((acc, i) => acc + (i.unitValue || 0), 0), 0);
+        const activeMrs = filteredMrs.filter((m) => m.status === 'Active');
+        const closedMrs = filteredMrs.filter((m) => m.status === 'Closed');
+        return {
+            total: filteredMrs.length,
+            active: activeMrs.length,
+            closed: closedMrs.length,
+            issuedValue: sumValue(filteredMrs),
+            activeValue: sumValue(activeMrs),
+            closedValue: sumValue(closedMrs),
+        };
+    }, [mrs, summaryFilters]);
+
+    const mrActionSummary = useMemo(() => {
+        const events = (mrs || []).flatMap((m: MemorandumReceipt) =>
+            (m.items || []).map((item: MRItem) => ({
+                mr: m,
+                item,
+                asset: assetById.get(item.assetId),
+            }))
+        );
+
+        const filteredEvents = events.filter((event) => {
+            const asset = event.asset as Asset | undefined;
+            if (summaryFilters.department !== 'All' && event.mr.departmentId !== summaryFilters.department) return false;
+            if (summaryFilters.custodian !== 'All' && event.mr.employeeId !== summaryFilters.custodian) return false;
+            if (summaryFilters.location !== 'All' && asset && asset.locationId !== summaryFilters.location) return false;
+            if (summaryFilters.startDate || summaryFilters.endDate) {
+                if (!inDateRange(event.item.returnDate, summaryFilters.startDate, summaryFilters.endDate)) return false;
+            }
+            return true;
+        });
+
+        const normalizedRemark = (value?: string) => (value || '').trim().toLowerCase();
+        const isReturn = (remark: string) => ['good', 'for repair', 'unserviceable'].includes(remark);
+
+        const returned = filteredEvents.filter((e) => isReturn(normalizedRemark(e.item.remarks)));
+        const transferred = filteredEvents.filter((e) => normalizedRemark(e.item.remarks) === 'transferred');
+        const missing = filteredEvents.filter((e) => normalizedRemark(e.item.remarks) === 'missing');
+
+        const sumValue = (list: typeof filteredEvents) => list.reduce((sum, e) => sum + (e.item.unitValue || 0), 0);
+
+        return {
+            returnedCount: returned.length,
+            returnedValue: sumValue(returned),
+            transferredCount: transferred.length,
+            transferredValue: sumValue(transferred),
+            missingCount: missing.length,
+            missingValue: sumValue(missing),
+        };
+    }, [mrs, summaryFilters, assetById]);
+
+    const topCustodians = useMemo(() => {
+        const map = new Map<string, { name: string; total: number }>();
+        assetsInScope.forEach((asset: Asset) => {
+            const current = map.get(asset.custodianId) || { name: getEmployeeFullName(employees.find((e: Employee) => e.id === asset.custodianId)), total: 0 };
+            current.total += asset.unitValue || 0;
+            map.set(asset.custodianId, current);
+        });
+        return Array.from(map.entries())
+            .map(([id, entry]) => ({ id, ...entry }))
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 5);
+    }, [assetsInScope, employees]);
+
+    const locationUtilization = useMemo(() => {
+        const map = new Map<string, { name: string; total: number; count: number }>();
+        assetsInScope.forEach((asset: Asset) => {
+            const loc = locations.find((l: Location) => l.id === asset.locationId);
+            const key = asset.locationId || 'Unknown';
+            const current = map.get(key) || { name: loc?.name || 'Unknown', total: 0, count: 0 };
+            current.total += asset.unitValue || 0;
+            current.count += 1;
+            map.set(key, current);
+        });
+        return Array.from(map.entries())
+            .map(([id, entry]) => ({ id, ...entry }))
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 5);
+    }, [assetsInScope, locations]);
+
+    const SummaryCard = ({ title, count, value, tone = 'slate' }: { title: string; count: number; value: number; tone?: string }) => {
+        const toneClasses: Record<string, string> = {
+            green: 'bg-green-50 text-green-700',
+            amber: 'bg-amber-50 text-amber-700',
+            red: 'bg-red-50 text-red-700',
+            blue: 'bg-blue-50 text-blue-700',
+            slate: 'bg-slate-50 text-slate-700',
+        };
+        return (
+            <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="text-xs uppercase text-slate-500 font-semibold mb-2">{title}</div>
+                <div className="flex items-end justify-between">
+                    <div className="text-2xl font-bold text-slate-800">{count}</div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${toneClasses[tone] || toneClasses.slate}`}>
+                        {formatCurrency(value)}
+                    </span>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center print:hidden">
@@ -532,6 +712,7 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                 <button onClick={() => setActiveTab('ppe')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'ppe' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>PPE Inventory</button>
                 <button onClick={() => setActiveTab('consumables')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'consumables' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Consumables Stock</button>
                 <button onClick={() => setActiveTab('movement')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'movement' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Stock Movement</button>
+                <button onClick={() => setActiveTab('custody')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'custody' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Custody & MR Summary</button>
                 <button onClick={() => setActiveTab('audit')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'audit' ? 'border-[#006400] text-[#006400]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Audit Findings</button>
             </div>
 
@@ -641,6 +822,125 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'custody' && (
+                    <div className="space-y-6">
+                        <div className="flex flex-wrap gap-3 items-end print:hidden">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
+                                <input
+                                    type="date"
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={summaryFilters.startDate}
+                                    onChange={(e) => setSummaryFilters({ ...summaryFilters, startDate: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">To</label>
+                                <input
+                                    type="date"
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={summaryFilters.endDate}
+                                    onChange={(e) => setSummaryFilters({ ...summaryFilters, endDate: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Unit</label>
+                                <select
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[180px]"
+                                    value={summaryFilters.department}
+                                    onChange={(e) => setSummaryFilters({ ...summaryFilters, department: e.target.value })}
+                                >
+                                    <option value="All">All Units</option>
+                                    {departments.map((d: Department) => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Location</label>
+                                <select
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[180px]"
+                                    value={summaryFilters.location}
+                                    onChange={(e) => setSummaryFilters({ ...summaryFilters, location: e.target.value })}
+                                >
+                                    <option value="All">All Locations</option>
+                                    {locations.map((l: Location) => (
+                                        <option key={l.id} value={l.id}>{l.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="min-w-[220px]">
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Custodian</label>
+                                <SearchableSelect
+                                    value={summaryFilters.custodian}
+                                    options={[
+                                        { value: 'All', label: 'All Custodians' },
+                                        ...employees.map((e: Employee) => ({
+                                            value: e.id,
+                                            label: `${getEmployeeFullName(e)}${e.status !== 'Active' ? ' (Inactive)' : ''}`,
+                                        })),
+                                    ]}
+                                    onChange={(value: string) => setSummaryFilters({ ...summaryFilters, custodian: value })}
+                                    placeholder="All Custodians"
+                                    className="w-full"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <h2 className="text-lg font-bold text-slate-800">MR Activity Summary</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <SummaryCard title="MRs Issued" count={mrIssuedSummary.total} value={mrIssuedSummary.issuedValue} tone="blue" />
+                                <SummaryCard title="Active MRs" count={mrIssuedSummary.active} value={mrIssuedSummary.activeValue} tone="green" />
+                                <SummaryCard title="Closed MRs" count={mrIssuedSummary.closed} value={mrIssuedSummary.closedValue} tone="slate" />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <SummaryCard title="Returned Assets" count={mrActionSummary.returnedCount} value={mrActionSummary.returnedValue} tone="green" />
+                                <SummaryCard title="Transferred Assets" count={mrActionSummary.transferredCount} value={mrActionSummary.transferredValue} tone="amber" />
+                                <SummaryCard title="Missing Reports" count={mrActionSummary.missingCount} value={mrActionSummary.missingValue} tone="red" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <h2 className="text-lg font-bold text-slate-800">Custody Snapshot</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+                                <SummaryCard title="In Custody (Active MR)" count={custodySummary.inCustodyCount} value={custodySummary.inCustodyValue} tone="blue" />
+                                <SummaryCard title="Available for Re-issue" count={custodySummary.availableCount} value={custodySummary.availableValue} tone="green" />
+                                <SummaryCard title="Under Repair" count={custodySummary.repairCount} value={custodySummary.repairValue} tone="amber" />
+                                <SummaryCard title="Missing" count={custodySummary.missingCount} value={custodySummary.missingValue} tone="red" />
+                                <SummaryCard title="Retired" count={custodySummary.retiredCount} value={custodySummary.retiredValue} tone="slate" />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
+                                <h3 className="text-sm font-bold text-slate-700 mb-3">Top Custodians by Value</h3>
+                                <div className="space-y-2">
+                                    {topCustodians.length === 0 && <div className="text-sm text-slate-400">No data.</div>}
+                                    {topCustodians.map((c) => (
+                                        <div key={c.id} className="flex items-center justify-between text-sm">
+                                            <span className="text-slate-600">{c.name}</span>
+                                            <span className="font-semibold text-slate-800">{formatCurrency(c.total)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
+                                <h3 className="text-sm font-bold text-slate-700 mb-3">Top Locations by Value</h3>
+                                <div className="space-y-2">
+                                    {locationUtilization.length === 0 && <div className="text-sm text-slate-400">No data.</div>}
+                                    {locationUtilization.map((loc) => (
+                                        <div key={loc.id} className="flex items-center justify-between text-sm">
+                                            <span className="text-slate-600">{loc.name}</span>
+                                            <span className="font-semibold text-slate-800">{formatCurrency(loc.total)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -5853,7 +6153,7 @@ const App = () => {
                 </div>
               );
           case 'activity-logs': return <ActivityLogView logs={logs} setLogs={setLogs} />;
-          case 'reports': return <ReportsModule assets={assets} catalog={catalog} transactions={transactions} audits={audits} departments={departments} locations={locations} categories={categories} />;
+          case 'reports': return <ReportsModule assets={assets} catalog={catalog} transactions={transactions} audits={audits} departments={departments} locations={locations} categories={categories} mrs={mrs} employees={employees} />;
           case 'settings': 
               return <SettingsView 
                   settings={settings} 
