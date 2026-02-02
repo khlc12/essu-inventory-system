@@ -6327,7 +6327,50 @@ const App = () => {
 
   const renderContent = () => {
       switch (view) {
-          case 'dashboard':
+          case 'dashboard': {
+              const activeMrAssetIds = new Set(
+                  (mrs || [])
+                      .filter((m: MemorandumReceipt) => m.status === 'Active')
+                      .flatMap((m: MemorandumReceipt) => (m.items || []).map((i: MRItem) => i.assetId))
+              );
+              const activeAssetsCount = assets.filter((a: Asset) => a.status === 'Active').length;
+              const underRepairCount = assets.filter((a: Asset) => a.status === 'Under Repair').length;
+              const missingCount = assets.filter((a: Asset) => a.status === 'Missing').length;
+              const retiredCount = assets.filter((a: Asset) => a.status === 'Retired').length;
+              const otherCount = assets.filter((a: Asset) => !['Active', 'Under Repair', 'Missing', 'Retired'].includes(a.status)).length;
+              const issuedCount = activeMrAssetIds.size;
+              const availableCount = assets.filter((a: Asset) => a.status === 'Active' && !activeMrAssetIds.has(a.id)).length;
+              const issueHoldCount = underRepairCount + missingCount;
+
+              const now = new Date();
+              const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+              const isThisMonth = (value?: string | Date | null) => {
+                  if (!value) return false;
+                  const date = new Date(value);
+                  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+              };
+              const newMrsCount = (mrs || []).filter((m: MemorandumReceipt) => isThisMonth(m.dateIssued)).length;
+              let returnsCount = 0;
+              let transfersCount = 0;
+              (mrs || []).forEach((m: MemorandumReceipt) => {
+                  (m.items || []).forEach((item: MRItem) => {
+                      if (!item.returnDate || !isThisMonth(item.returnDate)) return;
+                      const remark = String(item.remarks || '');
+                      if (remark === 'Transferred') transfersCount += 1;
+                      else if (remark !== 'Missing') returnsCount += 1;
+                  });
+              });
+              const totalAssets = assets.length;
+              const conditionRows = [
+                  { label: 'Active', count: activeAssetsCount, color: 'bg-emerald-500' },
+                  { label: 'Under Repair', count: underRepairCount, color: 'bg-amber-500' },
+                  { label: 'Missing', count: missingCount, color: 'bg-red-500' },
+                  { label: 'Retired', count: retiredCount, color: 'bg-slate-500' },
+              ];
+              if (otherCount) {
+                  conditionRows.push({ label: 'Other', count: otherCount, color: 'bg-slate-400' });
+              }
+
               return (
                 <div className="relative">
                     <div className="pointer-events-none absolute inset-0 opacity-5 flex justify-end items-start pr-6 pt-6">
@@ -6376,6 +6419,80 @@ const App = () => {
                         />
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard
+                            label="Active Assets"
+                            value={activeAssetsCount}
+                            icon={<Activity />}
+                            colorClass="bg-emerald-100 text-emerald-700"
+                            iconColorClass="text-emerald-700"
+                        />
+                        <StatCard
+                            label="Issued Assets"
+                            value={issuedCount}
+                            icon={<ArrowUpRight />}
+                            colorClass="bg-indigo-100 text-indigo-700"
+                            iconColorClass="text-indigo-700"
+                            subtext="Active MR"
+                        />
+                        <StatCard
+                            label="Available for Issuance"
+                            value={availableCount}
+                            icon={<Box />}
+                            colorClass="bg-sky-100 text-sky-700"
+                            iconColorClass="text-sky-700"
+                        />
+                        <StatCard
+                            label="Under Repair / Missing"
+                            value={issueHoldCount}
+                            icon={<AlertTriangle />}
+                            colorClass="bg-amber-100 text-amber-700"
+                            iconColorClass="text-amber-700"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4">MR Activity Snapshot</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                                    <div className="text-xs uppercase text-slate-500">New MRs (This Month)</div>
+                                    <div className="text-2xl font-semibold text-slate-800 mt-2">{newMrsCount}</div>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                                    <div className="text-xs uppercase text-slate-500">Returns (This Month)</div>
+                                    <div className="text-2xl font-semibold text-slate-800 mt-2">{returnsCount}</div>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                                    <div className="text-xs uppercase text-slate-500">Transfers (This Month)</div>
+                                    <div className="text-2xl font-semibold text-slate-800 mt-2">{transfersCount}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4">Asset Condition Breakdown</h3>
+                            <div className="space-y-4">
+                                {conditionRows.map((row) => {
+                                    const percent = totalAssets ? Math.round((row.count / totalAssets) * 100) : 0;
+                                    return (
+                                        <div key={row.label} className="space-y-2">
+                                            <div className="flex items-center justify-between text-sm text-slate-600">
+                                                <span className="font-medium">{row.label}</span>
+                                                <span>{row.count} ({percent}%)</span>
+                                            </div>
+                                            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                <div className={`h-2 ${row.color}`} style={{ width: `${percent}%` }}></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {totalAssets === 0 && (
+                                    <div className="text-sm text-slate-400">No assets available.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="text-lg font-bold text-slate-800 mb-6">Stock Movement Analytics</h3>
@@ -6402,6 +6519,7 @@ const App = () => {
                     </div>
                 </div>
               );
+          }
           case 'activity-logs': return <ActivityLogView logs={logs} setLogs={setLogs} />;
           case 'reports': return <ReportsModule assets={assets} catalog={catalog} transactions={transactions} audits={audits} departments={departments} locations={locations} categories={categories} mrs={mrs} employees={employees} />;
           case 'settings': 
