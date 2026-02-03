@@ -485,12 +485,15 @@ const StockMovementChart = ({ transactions, departments }: { transactions: Trans
 // --- Reports Module ---
 const ReportsModule = ({ assets, catalog, transactions, audits, departments, locations, categories, mrs, employees }: any) => {
     const [activeTab, setActiveTab] = useState<'ppe' | 'consumables' | 'movement' | 'audit' | 'custody'>('ppe');
-    const [filters, setFilters] = useState({
+    const [ppeFilters, setPpeFilters] = useState({
         startDate: '',
         endDate: '',
         department: 'All',
-        category: 'All',
-        status: 'Active'
+        location: 'All',
+        custodian: 'All',
+        availability: 'All',
+        condition: 'All',
+        mrStatus: 'All',
     });
     const [summaryFilters, setSummaryFilters] = useState({
         startDate: '',
@@ -500,13 +503,79 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
         custodian: 'All',
     });
 
+    const activeMrAssetIds = useMemo(() => {
+        const ids = new Set<string>();
+        (mrs || []).forEach((m: MemorandumReceipt) => {
+            if (m.status !== 'Active') return;
+            (m.items || []).forEach((item: MRItem) => ids.add(item.assetId));
+        });
+        return ids;
+    }, [mrs]);
+
+    const mrActivityByAsset = useMemo(() => {
+        const map = new Map<string, { mrStatus: 'Active' | 'Closed'; lastAction: string; lastActionDate: Date; mrNumber?: string }>();
+        (mrs || []).forEach((m: MemorandumReceipt) => {
+            (m.items || []).forEach((item: MRItem) => {
+                const remark = String(item.remarks || '').toLowerCase();
+                const hasReturnDate = Boolean(item.returnDate);
+                const actionDate = hasReturnDate ? new Date(item.returnDate as any) : new Date(m.dateIssued);
+                const action = hasReturnDate
+                    ? remark === 'transferred'
+                        ? 'Transferred'
+                        : remark === 'missing'
+                            ? 'Missing'
+                            : 'Returned'
+                    : 'Issued';
+                const mrStatus = m.status === 'Active' ? 'Active' : 'Closed';
+                const existing = map.get(item.assetId);
+                if (!existing || actionDate > existing.lastActionDate || mrStatus === 'Active') {
+                    map.set(item.assetId, {
+                        mrStatus,
+                        lastAction: action,
+                        lastActionDate: actionDate,
+                        mrNumber: m.mrNumber,
+                    });
+                }
+            });
+        });
+        return map;
+    }, [mrs]);
+
+    const getAvailability = (asset: Asset) => {
+        if (activeMrAssetIds.has(asset.id)) return 'Issued';
+        if (asset.status === 'Missing') return 'Missing';
+        if (asset.status === 'Under Repair' || asset.status === 'Retired') return 'On Hold';
+        return 'Available';
+    };
+
+    const getCondition = (asset: Asset) => {
+        if (asset.status === 'Missing') return 'Missing';
+        if (asset.status === 'Under Repair') return 'For Repair';
+        if (asset.status === 'Retired') return 'Unserviceable';
+        return 'Good';
+    };
+
     const filteredPPE = useMemo(() => {
         return assets.filter((a: Asset) => {
-            const matchesStatus = filters.status === 'All' ? true : a.status === filters.status;
-            // Add more filters as needed
-            return matchesStatus;
+            if (ppeFilters.department !== 'All' && a.departmentId !== ppeFilters.department) return false;
+            if (ppeFilters.location !== 'All' && a.locationId !== ppeFilters.location) return false;
+            if (ppeFilters.custodian !== 'All' && a.custodianId !== ppeFilters.custodian) return false;
+            if (ppeFilters.startDate || ppeFilters.endDate) {
+                if (!inDateRange(a.dateAcquired, ppeFilters.startDate, ppeFilters.endDate)) return false;
+            }
+
+            const availability = getAvailability(a);
+            if (ppeFilters.availability !== 'All' && availability !== ppeFilters.availability) return false;
+
+            const condition = getCondition(a);
+            if (ppeFilters.condition !== 'All' && condition !== ppeFilters.condition) return false;
+
+            const mrStatus = activeMrAssetIds.has(a.id) ? 'Active' : (mrActivityByAsset.has(a.id) ? 'Closed' : 'None');
+            if (ppeFilters.mrStatus !== 'All' && mrStatus !== ppeFilters.mrStatus) return false;
+
+            return true;
         });
-    }, [assets, filters]);
+    }, [assets, ppeFilters, activeMrAssetIds, mrActivityByAsset]);
 
     const stockMovementData = useMemo(() => {
         return transactions.flatMap((t: Transaction) => 
@@ -548,15 +617,6 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
             return true;
         });
     }, [assets, summaryFilters]);
-
-    const activeMrAssetIds = useMemo(() => {
-        const ids = new Set<string>();
-        (mrs || []).forEach((m: MemorandumReceipt) => {
-            if (m.status !== 'Active') return;
-            (m.items || []).forEach((item: MRItem) => ids.add(item.assetId));
-        });
-        return ids;
-    }, [mrs]);
 
     const custodySummary = useMemo(() => {
         const inCustody = assetsInScope.filter((a: Asset) => activeMrAssetIds.has(a.id));
@@ -724,32 +784,157 @@ const ReportsModule = ({ assets, catalog, transactions, audits, departments, loc
                             <h2 className="text-lg font-bold text-slate-800">Report on the Physical Count of Property, Plant and Equipment</h2>
                             <div className="text-sm text-slate-500 print:hidden">Showing {filteredPPE.length} assets</div>
                         </div>
+                        <div className="flex flex-wrap gap-3 items-end print:hidden">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
+                                <input
+                                    type="date"
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={ppeFilters.startDate}
+                                    onChange={(e) => setPpeFilters({ ...ppeFilters, startDate: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">To</label>
+                                <input
+                                    type="date"
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400]"
+                                    value={ppeFilters.endDate}
+                                    onChange={(e) => setPpeFilters({ ...ppeFilters, endDate: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Unit</label>
+                                <select
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[180px]"
+                                    value={ppeFilters.department}
+                                    onChange={(e) => setPpeFilters({ ...ppeFilters, department: e.target.value })}
+                                >
+                                    <option value="All">All Units</option>
+                                    {departments.map((d: Department) => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Location</label>
+                                <select
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[180px]"
+                                    value={ppeFilters.location}
+                                    onChange={(e) => setPpeFilters({ ...ppeFilters, location: e.target.value })}
+                                >
+                                    <option value="All">All Locations</option>
+                                    {locations.map((l: Location) => (
+                                        <option key={l.id} value={l.id}>{l.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="min-w-[220px]">
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Custodian</label>
+                                <SearchableSelect
+                                    value={ppeFilters.custodian}
+                                    options={[
+                                        { value: 'All', label: 'All Custodians' },
+                                        ...employees.map((e: Employee) => ({
+                                            value: e.id,
+                                            label: `${getEmployeeFullName(e)}${e.status !== 'Active' ? ' (Inactive)' : ''}`,
+                                        })),
+                                    ]}
+                                    onChange={(value: string) => setPpeFilters({ ...ppeFilters, custodian: value })}
+                                    placeholder="All Custodians"
+                                    className="w-full"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Availability</label>
+                                <select
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[170px]"
+                                    value={ppeFilters.availability}
+                                    onChange={(e) => setPpeFilters({ ...ppeFilters, availability: e.target.value })}
+                                >
+                                    <option value="All">All</option>
+                                    <option value="Available">Available</option>
+                                    <option value="Issued">Issued</option>
+                                    <option value="On Hold">On Hold</option>
+                                    <option value="Missing">Missing</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Condition</label>
+                                <select
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[170px]"
+                                    value={ppeFilters.condition}
+                                    onChange={(e) => setPpeFilters({ ...ppeFilters, condition: e.target.value })}
+                                >
+                                    <option value="All">All</option>
+                                    <option value="Good">Good</option>
+                                    <option value="For Repair">For Repair</option>
+                                    <option value="Unserviceable">Unserviceable</option>
+                                    <option value="Missing">Missing</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">MR Status</label>
+                                <select
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#006400] min-w-[150px]"
+                                    value={ppeFilters.mrStatus}
+                                    onChange={(e) => setPpeFilters({ ...ppeFilters, mrStatus: e.target.value })}
+                                >
+                                    <option value="All">All</option>
+                                    <option value="Active">Active</option>
+                                    <option value="Closed">Closed</option>
+                                    <option value="None">None</option>
+                                </select>
+                            </div>
+                        </div>
                         <div className="overflow-x-auto">
                             <table className="w-full min-w-[720px] text-sm text-left border border-slate-300">
                                 <thead className="bg-slate-100 text-slate-800 font-semibold">
                                     <tr>
                                         <th className="px-3 py-2 border border-slate-300">Property No.</th>
                                         <th className="px-3 py-2 border border-slate-300">Article / Description</th>
+                                        <th className="px-3 py-2 border border-slate-300">Custodian</th>
+                                        <th className="px-3 py-2 border border-slate-300">Unit</th>
                                         <th className="px-3 py-2 border border-slate-300">Date Acquired</th>
                                         <th className="px-3 py-2 border border-slate-300 text-right">Unit Value</th>
                                         <th className="px-3 py-2 border border-slate-300">Location</th>
-                                        <th className="px-3 py-2 border border-slate-300">Status</th>
+                                        <th className="px-3 py-2 border border-slate-300">Availability</th>
+                                        <th className="px-3 py-2 border border-slate-300">Condition</th>
+                                        <th className="px-3 py-2 border border-slate-300">MR Status</th>
+                                        <th className="px-3 py-2 border border-slate-300">Last MR Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredPPE.map((a: Asset) => (
-                                        <tr key={a.id}>
-                                            <td className="px-3 py-2 border border-slate-300 font-medium">{a.propertyNumber}</td>
-                                            <td className="px-3 py-2 border border-slate-300">
-                                                <div className="font-medium">{catalog.find((c:any) => c.id === a.catalogItemId)?.article}</div>
-                                                <div className="text-xs text-slate-500">{a.description}</div>
-                                            </td>
-                                            <td className="px-3 py-2 border border-slate-300">{formatDate(a.dateAcquired)}</td>
-                                            <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency(a.unitValue)}</td>
-                                            <td className="px-3 py-2 border border-slate-300">{locations.find((l:Location) => l.id === a.locationId)?.name}</td>
-                                            <td className="px-3 py-2 border border-slate-300 text-center">{a.status}</td>
-                                        </tr>
-                                    ))}
+                                    {filteredPPE.map((a: Asset) => {
+                                        const custodian = employees.find((e: Employee) => e.id === a.custodianId);
+                                        const unit = departments.find((d: Department) => d.id === a.departmentId);
+                                        const location = locations.find((l: Location) => l.id === a.locationId);
+                                        const availability = getAvailability(a);
+                                        const condition = getCondition(a);
+                                        const mrStatus = activeMrAssetIds.has(a.id) ? 'Active' : (mrActivityByAsset.has(a.id) ? 'Closed' : 'None');
+                                        const mrActivity = mrActivityByAsset.get(a.id);
+                                        const lastMrAction = mrActivity
+                                            ? `${mrActivity.lastAction} • ${formatDate(mrActivity.lastActionDate.toISOString())}`
+                                            : '—';
+                                        return (
+                                            <tr key={a.id}>
+                                                <td className="px-3 py-2 border border-slate-300 font-medium">{a.propertyNumber}</td>
+                                                <td className="px-3 py-2 border border-slate-300">
+                                                    <div className="font-medium">{catalog.find((c:any) => c.id === a.catalogItemId)?.article}</div>
+                                                    <div className="text-xs text-slate-500">{a.description}</div>
+                                                </td>
+                                                <td className="px-3 py-2 border border-slate-300">{custodian ? getEmployeeFullName(custodian) : '-'}</td>
+                                                <td className="px-3 py-2 border border-slate-300">{unit?.code || '-'}</td>
+                                                <td className="px-3 py-2 border border-slate-300">{formatDate(a.dateAcquired)}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-right">{formatCurrency(a.unitValue)}</td>
+                                                <td className="px-3 py-2 border border-slate-300">{location?.name || '-'}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center">{availability}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center">{condition}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center">{mrStatus}</td>
+                                                <td className="px-3 py-2 border border-slate-300 text-center">{lastMrAction}</td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -1816,7 +2001,7 @@ const AssetRegistryList = ({ assets, setAssets, departments, locations, catalog,
 const AssetForm = ({ onSave, onCancel, assets, catalog, employees, departments, locations, funds, initialData, isSaving }: any) => {
     const [formData, setFormData] = useState({
         propertyNumber: '',
-        dateAcquired: '',
+        dateAcquired: new Date().toISOString().slice(0, 10),
         catalogItemId: '',
         description: '',
         unitValue: '',
