@@ -230,18 +230,26 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
   const oauthClientRole = userInfo?.client_role || userInfo?.clientRole || null;
   const passwordHash = randomUUID();
 
-  let user = oauthSub ? await prisma.user.findUnique({ where: { oauthSub } }) : null;
-  if (!user) {
-    user = await prisma.user.findUnique({ where: { username } });
-  }
+  // Prefer username/email identity first. HRMS re-deployments can recycle `sub` values.
+  const userByUsername = await prisma.user.findUnique({ where: { username } });
+  const userByOauthSub = oauthSub ? await prisma.user.findUnique({ where: { oauthSub } }) : null;
+  const isOauthSubCollision = Boolean(
+    !userByUsername &&
+    userByOauthSub &&
+    normalizeEmail(userByOauthSub.username) !== normalizeEmail(username)
+  );
+
+  let user = userByUsername || (isOauthSubCollision ? null : userByOauthSub);
+  const oauthSubAvailableForUser = Boolean(oauthSub && (!userByOauthSub || userByOauthSub.id === user?.id));
 
   if (user) {
     user = await prisma.user.update({
       where: { id: user.id },
       data: {
+        username,
         role,
         status: 'Active',
-        oauthSub: oauthSub || user.oauthSub,
+        oauthSub: oauthSubAvailableForUser ? oauthSub || user.oauthSub : user.oauthSub,
         oauthClientRole: oauthClientRole || user.oauthClientRole,
         lastOauthLoginAt: new Date(),
       },
@@ -253,7 +261,7 @@ app.get('/api/auth/sso/callback', asyncHandler(async (req, res) => {
         passwordHash,
         role,
         status: 'Active',
-        oauthSub: oauthSub || undefined,
+        oauthSub: oauthSubAvailableForUser ? oauthSub || undefined : undefined,
         oauthClientRole: oauthClientRole || undefined,
         lastOauthLoginAt: new Date(),
       },
