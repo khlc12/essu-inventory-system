@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE `systemsettings` ADD COLUMN `integrations` JSON NULL;
+ALTER TABLE `SystemSettings` ADD COLUMN `integrations` JSON NULL;
