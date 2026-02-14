@@ -5,9 +5,9 @@ A comprehensive, web-based inventory management prototype designed for the Easte
 ## 🔑 Access / Roles
 Authentication and role-based access are enabled.
 - Local accounts (seeded): `officer / admin123` and `staff / staff123`
-- HRMS SSO: restricted to **Supply Office** accounts
-  - Supply Officer (or roles containing Officer/Admin) => **Officer**
-  - Other Supply Office staff => **Staff**
+- HRMS SSO: access is enforced by HRMS authorization rules
+  - `client_role = admin` => **Officer**
+  - Any other `client_role` => **Staff**
 
 ## 🚀 Key Features
 
@@ -44,7 +44,7 @@ Authentication and role-based access are enabled.
 ### 6. Master Data Management (MDM)
 Centralized management for system integrity:
 *   **Employees:** Synced from HRMS (read-only in-app).
-*   **Departments:** Synced from HRMS (read-only in-app).
+*   **Units/Departments:** Synced from HRMS Units API (read-only in-app).
 *   **Locations:** Building/Room management.
 *   **Fund Clusters:** Fund source definitions.
 *   **Asset Categories:** Classification for PPE vs. Consumables.
@@ -61,9 +61,9 @@ Dedicated reporting module with export/print capabilities:
 *   **Settings:** Configure system name, logo, reorder thresholds, and document signatories.
 *   **Activity Logs:** Full audit trail of all Create, Update, Delete, and Export actions.
 *   **Database Export:** JSON export of current state.
-*   **User Management:** Officer can create/deactivate Staff accounts.
+*   **User Management:** Account creation/editing in Settings is disabled.
 *   **Success/Confirm UX:** Custom confirmation dialogs and success banners across mutations; logout requires confirmation.
-*   **HRMS Sync:** Officer-triggered sync for Employees and Departments.
+*   **HRMS Sync:** Officer-triggered sync for Employees and Units/Departments.
 *   **Data Health Check:** Validates common data issues (negative quantities, invalid references).
 
 ---
@@ -107,6 +107,22 @@ npm run dev            # starts API on http://localhost:4000
 - `HRMS_API_BASE_URL` (optional override)
 - `HRMS_SERVICE_TOKEN` (optional; service token for sync without user SSO)
 
+### HRMS sync behavior (current)
+- `POST /api/hrms/departments/sync` pulls from HRMS `/api/units` and imports only unit types:
+  - `college`
+  - `office`
+- Unit records of type `program` are not imported as standalone departments.
+- `POST /api/hrms/employees/sync` resolves employee unit mapping as:
+  - if employee unit type is `program`, map employee to the parent unit (`parent_unit_id`)
+  - parent unit must be `college` or `office`
+- Employee identity key for upsert is resolved in this order:
+  - `employee_number`
+  - `employee_id`
+  - HRMS `id`
+  - `contact.email`
+- Employee and department/unit master data are read-only in-app:
+  - manual create/update/deactivate endpoints return `403`.
+
 ### Available endpoints (selected)
 - `GET /health`
 - `GET /api/departments`
@@ -133,7 +149,7 @@ npm run dev            # starts API on http://localhost:4000
 - `GET /api/auth/sso/callback` (redirects to frontend)
 - `POST /api/auth/logout` (SSO end-session redirect)
 - `POST /api/hrms/employees/sync` (Officer)
-- `POST /api/hrms/departments/sync` (Officer)
+- `POST /api/hrms/departments/sync` (Officer; syncs HRMS Units as departments)
 - `POST /api/maintenance/export` (Officer)
 - `POST /api/maintenance/health` (Officer)
 
