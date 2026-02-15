@@ -1,154 +1,143 @@
 # Entity-Relationship Diagram (Textual)
 
 ## Scope
-This ERD describes all local database entities from the Inventory and Asset Management System and the external HRMS/SSO entities that integrate via OAuth and sync endpoints.
+This ERD documents the current local MySQL schema plus external HRMS entities used for SSO and sync.
 
-## Local Database Entities (MySQL)
+## Local Database Entities
 
 ### User
-- **PK**: id
-- **UQ**: username
-- **Fields**: passwordHash, role, status, createdAt, updatedAt
-- **Relationships**: User 1..* ActivityLog
+- PK: `id`
+- UQ: `username`, `oauthSub` (nullable unique)
+- Fields: `passwordHash`, `role`, `oauthClientRole?`, `lastOauthLoginAt?`, `status`, `createdAt`, `updatedAt`
+- Relationships: `User` 1..* `ActivityLog`
 
-### Department
-- **PK**: id
-- **UQ**: code
-- **Fields**: name, head?, locationId (FK), status, createdAt, updatedAt
-- **Relationships**: Department 1..* Employee, Asset, Transaction, MemorandumReceipt, AuditSession
-- **FK**: locationId -> Location.id
+### Department (Unit)
+- PK: `id`
+- UQ: `code`
+- Fields: `name`, `head?`, `locationId?`, `status`, `createdAt`, `updatedAt`
+- FK: `locationId -> Location.id` (nullable)
+- Relationships: `Department` 1..* `Employee`, `Asset`, `Transaction`, `MemorandumReceipt`, `AuditSession`
 
 ### Location
-- **PK**: id
-- **UQ**: code
-- **Fields**: name, description?, status, createdAt, updatedAt
-- **Relationships**: Location 1..* Department, Asset, Transaction, AuditSession
+- PK: `id`
+- UQ: `code`
+- Fields: `name`, `description?`, `status`, `createdAt`, `updatedAt`
+- Relationships: `Location` 1..* `Department`, `Asset`, `Transaction`, `AuditSession`
 
 ### FundCluster
-- **PK**: id
-- **UQ**: code
-- **Fields**: name, description?, status, createdAt, updatedAt
-- **Relationships**: FundCluster 1..* CatalogItem, Asset
+- PK: `id`
+- UQ: `code`
+- Fields: `name`, `description?`, `status`, `createdAt`, `updatedAt`
+- Relationships: `FundCluster` 1..* `CatalogItem`, `Asset`
 
 ### AssetCategory
-- **PK**: id
-- **UQ**: code
-- **Fields**: name, description?, type, status, createdAt, updatedAt
-- **Relationships**: AssetCategory 1..* CatalogItem
+- PK: `id`
+- UQ: `code`
+- Fields: `name`, `description?`, `type`, `status`, `createdAt`, `updatedAt`
+- Relationships: `AssetCategory` 1..* `CatalogItem`
 
 ### CatalogItem
-- **PK**: id
-- **UQ**: stockNumber
-- **Fields**: article, description, categoryId (FK), fundClusterId? (FK), unit, unitValue?, itemType, quantity, estimatedUsefulLife?, reorderPoint?, status, createdAt, updatedAt
-- **Relationships**: CatalogItem 1..* Asset, TransactionItem
-- **FK**: categoryId -> AssetCategory.id
-- **FK**: fundClusterId -> FundCluster.id (optional)
+- PK: `id`
+- UQ: `stockNumber`
+- Fields: `article`, `description`, `categoryId`, `fundClusterId?`, `unit`, `unitValue?`, `itemType`, `quantity`, `estimatedUsefulLife?`, `reorderPoint?`, `status`, `createdAt`, `updatedAt`
+- FK: `categoryId -> AssetCategory.id`, `fundClusterId -> FundCluster.id` (nullable)
+- Relationships: `CatalogItem` 1..* `Asset`, `TransactionItem`
 
 ### Employee
-- **PK**: id
-- **UQ**: employeeId
-- **Fields**: firstName, middleName?, lastName, position?, departmentId (FK), status, createdAt, updatedAt
-- **Relationships**: Employee 1..* Asset (custodian), TransactionItem (custodian), MemorandumReceipt
-- **FK**: departmentId -> Department.id
+- PK: `id`
+- UQ: `employeeId`
+- Fields: `firstName`, `middleName?`, `lastName`, `position?`, `departmentId`, `status`, `createdAt`, `updatedAt`
+- FK: `departmentId -> Department.id`
+- Relationships: `Employee` 1..* `Asset` (as custodian), `TransactionItem` (optional), `MemorandumReceipt`
 
 ### Asset
-- **PK**: id
-- **UQ**: propertyNumber
-- **Fields**: catalogItemId (FK), description, unitValue, quantity, dateAcquired, fundClusterId (FK), departmentId (FK), custodianId (FK), locationId (FK), remarks?, status, imageUrl?, createdAt, updatedAt
-- **Relationships**: Asset 1..* MRItem, AuditItem
-- **FK**: catalogItemId -> CatalogItem.id
-- **FK**: fundClusterId -> FundCluster.id
-- **FK**: departmentId -> Department.id
-- **FK**: custodianId -> Employee.id
-- **FK**: locationId -> Location.id
+- PK: `id`
+- UQ: `propertyNumber`
+- Fields: `catalogItemId`, `description`, `unitValue`, `quantity`, `dateAcquired`, `fundClusterId`, `departmentId?`, `custodianId`, `locationId?`, `remarks?`, `status`, `imageUrl?`, `createdAt`, `updatedAt`
+- FK: `catalogItemId -> CatalogItem.id`, `fundClusterId -> FundCluster.id`, `departmentId -> Department.id` (nullable), `custodianId -> Employee.id`, `locationId -> Location.id` (nullable)
+- Relationships: `Asset` 1..* `MRItem`, `AuditItem`
 
 ### Transaction
-- **PK**: id
-- **UQ**: transactionId
-- **Fields**: date, type, departmentId? (FK), supplier?, referenceNo?, locationId? (FK), status, remarks?, createdBy, createdAt, updatedAt
-- **Relationships**: Transaction 1..* TransactionItem
-- **FK**: departmentId -> Department.id (optional)
-- **FK**: locationId -> Location.id (optional)
+- PK: `id`
+- UQ: `transactionId`
+- Fields: `date`, `type`, `departmentId?`, `supplier?`, `referenceNo?`, `locationId?`, `status`, `remarks?`, `createdBy`, `createdAt`, `updatedAt`
+- FK: `departmentId -> Department.id` (nullable), `locationId -> Location.id` (nullable)
+- Relationships: `Transaction` 1..* `TransactionItem`
 
 ### TransactionItem
-- **PK**: id
-- **Fields**: transactionId (FK), catalogItemId (FK), quantity, remarks?, custodianId? (FK)
-- **Relationships**: TransactionItem *..1 Transaction, *..1 CatalogItem, *..1 Employee (optional)
-- **FK**: transactionId -> Transaction.id
-- **FK**: catalogItemId -> CatalogItem.id
-- **FK**: custodianId -> Employee.id (optional)
+- PK: `id`
+- Fields: `transactionId`, `catalogItemId`, `quantity`, `remarks?`, `custodianId?`
+- FK: `transactionId -> Transaction.id`, `catalogItemId -> CatalogItem.id`, `custodianId -> Employee.id` (nullable)
+- Relationships: `TransactionItem` *..1 `Transaction`, *..1 `CatalogItem`, *..1 `Employee` (optional)
 
 ### MemorandumReceipt
-- **PK**: id
-- **UQ**: mrNumber
-- **Fields**: dateIssued, employeeId (FK), departmentId (FK), status, remarks?, createdAt, updatedAt
-- **Relationships**: MemorandumReceipt 1..* MRItem
-- **FK**: employeeId -> Employee.id
-- **FK**: departmentId -> Department.id
+- PK: `id`
+- UQ: `mrNumber`
+- Fields: `dateIssued`, `employeeId`, `departmentId`, `status`, `remarks?`, `createdAt`, `updatedAt`
+- FK: `employeeId -> Employee.id`, `departmentId -> Department.id`
+- Relationships: `MemorandumReceipt` 1..* `MRItem`
 
 ### MRItem
-- **PK**: id
-- **Fields**: mrId (FK), assetId (FK), propertyNumber, description, unitValue, returnDate?, remarks?
-- **Relationships**: MRItem *..1 MemorandumReceipt, *..1 Asset
-- **FK**: mrId -> MemorandumReceipt.id
-- **FK**: assetId -> Asset.id
+- PK: `id`
+- Fields: `mrId`, `assetId`, `propertyNumber`, `description`, `unitValue`, `returnDate?`, `remarks?`
+- FK: `mrId -> MemorandumReceipt.id`, `assetId -> Asset.id`
+- Relationships: `MRItem` *..1 `MemorandumReceipt`, *..1 `Asset`
 
 ### AuditSession
-- **PK**: id
-- **UQ**: sessionId
-- **Fields**: date, departmentId? (FK), locationId? (FK), description, status, createdBy, createdAt, finalizedAt?
-- **Relationships**: AuditSession 1..* AuditItem
-- **FK**: departmentId -> Department.id (optional)
-- **FK**: locationId -> Location.id (optional)
+- PK: `id`
+- UQ: `sessionId`
+- Fields: `date`, `departmentId?`, `locationId?`, `description`, `status`, `createdBy`, `createdAt`, `finalizedAt?`
+- FK: `departmentId -> Department.id` (nullable), `locationId -> Location.id` (nullable)
+- Relationships: `AuditSession` 1..* `AuditItem`
 
 ### AuditItem
-- **PK**: id
-- **Fields**: auditId (FK), assetId (FK), propertyNumber, description, unitValue, systemQty, actualQty?, shortageOverageQty, shortageOverageValue, status, remarks?, locationName, custodianName
-- **Relationships**: AuditItem *..1 AuditSession, *..1 Asset
-- **FK**: auditId -> AuditSession.id
-- **FK**: assetId -> Asset.id
+- PK: `id`
+- Fields: `auditId`, `assetId`, `propertyNumber`, `description`, `unitValue`, `systemQty`, `actualQty?`, `shortageOverageQty`, `shortageOverageValue`, `status`, `remarks?`, `locationName`, `custodianName`
+- FK: `auditId -> AuditSession.id`, `assetId -> Asset.id`
+- Relationships: `AuditItem` *..1 `AuditSession`, *..1 `Asset`
 
 ### ActivityLog
-- **PK**: id
-- **Fields**: timestamp, userId (FK), username, role, action, module, referenceId, description
-- **Relationships**: ActivityLog *..1 User
-- **FK**: userId -> User.id
+- PK: `id`
+- Fields: `timestamp`, `userId`, `username`, `role`, `action`, `module`, `referenceId`, `description`
+- FK: `userId -> User.id` (nullable relation in Prisma)
+- Relationships: `ActivityLog` *..1 `User`
 
 ### SystemSettings
-- **PK**: id (fixed: 1)
-- **Fields**: general (JSON), inventory (JSON), documents (JSON), notifications (JSON), integrations (JSON?), updatedAt
+- PK: `id` (singleton row, default `1`)
+- Fields: `general` (JSON), `inventory` (JSON), `documents` (JSON), `notifications` (JSON), `integrations?` (JSON), `updatedAt`
+- Usage: stores OAuth config and latest HRMS sync timestamps (`lastEmployeeSyncAt`, `lastDepartmentSyncAt`).
 
 ## Enumerations
-- **Status**: Active, Inactive
-- **ItemType**: PPE, Consumable
-- **CategoryType**: PPE, Consumable, SemiExpendable
-- **AssetStatus**: Active, Retired, UnderRepair, Missing
-- **TransactionType**: StockIn, StockOut
-- **TransactionStatus**: Pending, Completed, Cancelled
-- **AuditSessionStatus**: Draft, Finalized
-- **AuditItemStatus**: Matched, Shortage, Overage, Uncounted
-- **MRStatus**: Active, Closed
+- `Status`: `Active`, `Inactive`
+- `ItemType`: `PPE`, `Consumable`
+- `CategoryType`: `PPE`, `Consumable`, `SemiExpendable`
+- `AssetStatus`: `Active`, `Retired`, `UnderRepair`, `Missing`
+- `TransactionType`: `StockIn`, `StockOut`
+- `TransactionStatus`: `Pending`, `Completed`, `Cancelled`
+- `AuditSessionStatus`: `Draft`, `Finalized`
+- `AuditItemStatus`: `Matched`, `Shortage`, `Overage`, `Uncounted`
+- `MRStatus`: `Active`, `Closed`
 
 ## External HRMS/SSO Entities
 
-### HRMS Userinfo (OAuth /userinfo)
-- **Fields**: sub, name, email, employee_id, employee_number, first_name, last_name, middle_name, department, position, roles[], permissions[]
-- **Usage**: authorizes access, maps to local User (username + role)
+### OAuth Userinfo
+- Typical fields: `sub`, `email`, `client_role`, `name`, `employee_id`, `employee_number`, `unit`, `position`, `roles[]`, `permissions[]`
+- Local usage: identify/upsert user and map app role (`client_role=admin` -> `Officer`, else `Staff`).
 
-### HRMS Employee (HRMS API)
-- **Fields**: employee_id, employee_number, first_name, middle_name, last_name, department, position, status, is_deleted, deleted_at
-- **Usage**: sync source for local Employee; department name maps to local Department
+### HRMS Unit (`/api/units`)
+- Typical fields: `id`, `code`, `name`, `unit_type`, `parent_unit_id`, `status`, `is_deleted`, `deleted_at`
+- Local usage: source for `Department` sync, filtered to `college` and `office` types.
 
-### HRMS Department (HRMS API)
-- **Fields**: code?, name, description?, status, is_deleted, deleted_at
-- **Usage**: sync source for local Department
+### HRMS Employee (`/api/employees`)
+- Typical fields: `employee_id`, `employee_number`, `name.*`, `position.*`, `unit`, `employment.status`, `is_deleted`, `deleted_at`
+- Local usage: source for `Employee` sync; program units map to parent college/office unit.
 
-### OAuth Token (HRMS)
-- **Fields**: access_token, expires_in, refresh_token? (provider-specific)
-- **Usage**: stored in server memory for HRMS API calls and SSO logout
+### OAuth Token
+- Fields: `access_token`, `expires_in`, `refresh_token?`
+- Local usage: stored in server memory per authenticated SSO user for HRMS sync and logout operations.
 
-## Cross-System Relationships (Sync/Integration)
-- **HRMS Userinfo -> Local User**: SSO login upserts User and assigns role (Officer/Staff).
-- **HRMS Employee -> Local Employee**: sync upserts Employee and links to Department.
-- **HRMS Department -> Local Department**: sync upserts Department (code/name/status).
-- **OAuth Token -> HRMS API Access**: enables employee/department sync and SSO logout.
+## Operational Relationship Notes
+- Department and Employee master data are read-only in this app and maintained via HRMS sync endpoints.
+- A Supply Office placeholder employee (`employeeId = SUPPLY-OFFICE`) is used as default/return custodian.
+- MR lifecycle updates both `MemorandumReceipt/MRItem` and related `Asset` records.
+- At most one active MR assignment per asset is enforced by MR issuance/transfer checks.

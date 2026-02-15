@@ -1,251 +1,240 @@
 # Data Dictionary
 
 ## Overview
-This data dictionary documents the local MySQL database schema used by the Inventory and Asset Management System, plus the external HRMS/SSO payloads consumed during authentication and sync.
+This dictionary reflects the current schema and integration payloads for the ESSU Supply Office PPE and Consumables Management System.
 
 ## Conventions
-- **PK**: Primary key
-- **FK**: Foreign key
-- **UQ**: Unique
-- **Nullable**: Field may be null
-- Types are listed in Prisma terms with typical MySQL equivalents in parentheses.
+- PK: Primary Key
+- FK: Foreign Key
+- UQ: Unique
+- Nullable: field can be `null`
+- Types use Prisma names with MySQL equivalents.
 
 ## Local Database Tables
 
 ### User
-- **id**: String (VARCHAR) | PK | System user identifier.
-- **username**: String (VARCHAR) | UQ | Login username (email or SSO subject).
-- **passwordHash**: String (VARCHAR) | Required | Password (seeded/local login only).
-- **role**: String (VARCHAR) | Required | `Officer` or `Staff`.
-- **status**: Status (ENUM) | Default `Active` | Account status.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK | User ID.
+- `username`: String (VARCHAR) | UQ | Login identifier (email/username).
+- `passwordHash`: String (VARCHAR) | Required | Stored password/random value for SSO-created users.
+- `role`: String (VARCHAR) | Required | `Officer` or `Staff`.
+- `oauthSub`: String (VARCHAR) | UQ, Nullable | OAuth subject identifier.
+- `oauthClientRole`: String (VARCHAR) | Nullable | Last HRMS `client_role` value.
+- `lastOauthLoginAt`: DateTime (DATETIME) | Nullable | Last successful SSO timestamp.
+- `status`: Enum `Status` | Default `Active`.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
-### Department
-- **id**: String (VARCHAR) | PK | Department identifier.
-- **code**: String (VARCHAR) | UQ | Department code.
-- **name**: String (VARCHAR) | Required | Department name.
-- **head**: String (VARCHAR) | Nullable | Department head name.
-- **locationId**: String (VARCHAR) | FK -> Location.id | Nullable | Location reference.
-- **status**: Status (ENUM) | Default `Active` | Department status.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+### Department (Unit)
+- `id`: String (VARCHAR) | PK.
+- `code`: String (VARCHAR) | UQ.
+- `name`: String (VARCHAR) | Required.
+- `head`: String (VARCHAR) | Nullable.
+- `locationId`: String (VARCHAR) | FK -> `Location.id` | Nullable.
+- `status`: Enum `Status` | Default `Active`.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### Location
-- **id**: String (VARCHAR) | PK | Location identifier.
-- **code**: String (VARCHAR) | UQ | Location code.
-- **name**: String (VARCHAR) | Required | Location name.
-- **description**: String (VARCHAR) | Nullable | Location details.
-- **status**: Status (ENUM) | Default `Active` | Location status.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `code`: String (VARCHAR) | UQ.
+- `name`: String (VARCHAR) | Required.
+- `description`: String (VARCHAR) | Nullable.
+- `status`: Enum `Status` | Default `Active`.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### FundCluster
-- **id**: String (VARCHAR) | PK | Fund cluster identifier.
-- **code**: String (VARCHAR) | UQ | Fund code.
-- **name**: String (VARCHAR) | Required | Fund name.
-- **description**: String (VARCHAR) | Nullable | Fund details.
-- **status**: Status (ENUM) | Default `Active` | Fund status.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `code`: String (VARCHAR) | UQ.
+- `name`: String (VARCHAR) | Required.
+- `description`: String (VARCHAR) | Nullable.
+- `status`: Enum `Status` | Default `Active`.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### AssetCategory
-- **id**: String (VARCHAR) | PK | Category identifier.
-- **code**: String (VARCHAR) | UQ | Category code.
-- **name**: String (VARCHAR) | Required | Category name.
-- **description**: String (VARCHAR) | Nullable | Category details.
-- **type**: CategoryType (ENUM) | Required | PPE/Consumable/SemiExpendable.
-- **status**: Status (ENUM) | Default `Active` | Category status.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `code`: String (VARCHAR) | UQ.
+- `name`: String (VARCHAR) | Required.
+- `description`: String (VARCHAR) | Nullable.
+- `type`: Enum `CategoryType` | Required.
+- `status`: Enum `Status` | Default `Active`.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### CatalogItem
-- **id**: String (VARCHAR) | PK | Catalog item identifier.
-- **stockNumber**: String (VARCHAR) | UQ | Stock number.
-- **article**: String (VARCHAR) | Required | Item article.
-- **description**: String (VARCHAR) | Required | Item description.
-- **categoryId**: String (VARCHAR) | FK -> AssetCategory.id | Required | Category reference.
-- **fundClusterId**: String (VARCHAR) | FK -> FundCluster.id | Nullable | Fund reference.
-- **unit**: String (VARCHAR) | Required | Unit of measure.
-- **unitValue**: Decimal (DECIMAL) | Nullable | Unit cost.
-- **itemType**: ItemType (ENUM) | Required | PPE or Consumable.
-- **quantity**: Int (INT) | Default 0 | On-hand stock (consumables).
-- **estimatedUsefulLife**: Int (INT) | Nullable | EUL in years (PPE).
-- **reorderPoint**: Int (INT) | Nullable | Reorder threshold.
-- **status**: Status (ENUM) | Default `Active` | Catalog status.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `stockNumber`: String (VARCHAR) | UQ.
+- `article`: String (VARCHAR) | Required.
+- `description`: String (VARCHAR) | Required.
+- `categoryId`: String (VARCHAR) | FK -> `AssetCategory.id` | Required.
+- `fundClusterId`: String (VARCHAR) | FK -> `FundCluster.id` | Nullable.
+- `unit`: String (VARCHAR) | Required.
+- `unitValue`: Decimal (DECIMAL) | Nullable.
+- `itemType`: Enum `ItemType` | Required.
+- `quantity`: Int (INT) | Default `0`.
+- `estimatedUsefulLife`: Int (INT) | Nullable.
+- `reorderPoint`: Int (INT) | Nullable.
+- `status`: Enum `Status` | Default `Active`.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### Employee
-- **id**: String (VARCHAR) | PK | Employee identifier.
-- **employeeId**: String (VARCHAR) | UQ | Employee number/id.
-- **firstName**: String (VARCHAR) | Required | First name.
-- **middleName**: String (VARCHAR) | Nullable | Middle name.
-- **lastName**: String (VARCHAR) | Required | Last name.
-- **position**: String (VARCHAR) | Nullable | Job title.
-- **departmentId**: String (VARCHAR) | FK -> Department.id | Required | Department reference.
-- **status**: Status (ENUM) | Default `Active` | Employee status.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `employeeId`: String (VARCHAR) | UQ.
+- `firstName`: String (VARCHAR) | Required.
+- `middleName`: String (VARCHAR) | Nullable.
+- `lastName`: String (VARCHAR) | Required.
+- `position`: String (VARCHAR) | Nullable.
+- `departmentId`: String (VARCHAR) | FK -> `Department.id` | Required.
+- `status`: Enum `Status` | Default `Active`.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### Asset
-- **id**: String (VARCHAR) | PK | Asset identifier.
-- **propertyNumber**: String (VARCHAR) | UQ | Property number.
-- **catalogItemId**: String (VARCHAR) | FK -> CatalogItem.id | Required | Catalog reference.
-- **description**: String (VARCHAR) | Required | Asset description.
-- **unitValue**: Decimal (DECIMAL) | Required | Unit value.
-- **quantity**: Int (INT) | Required | Quantity.
-- **dateAcquired**: DateTime (DATETIME) | Required | Acquisition date.
-- **fundClusterId**: String (VARCHAR) | FK -> FundCluster.id | Required | Fund reference.
-- **departmentId**: String (VARCHAR) | FK -> Department.id | Required | Department reference.
-- **custodianId**: String (VARCHAR) | FK -> Employee.id | Required | Custodian reference.
-- **locationId**: String (VARCHAR) | FK -> Location.id | Required | Location reference.
-- **remarks**: String (VARCHAR) | Nullable | Notes.
-- **status**: AssetStatus (ENUM) | Required | Asset status.
-- **imageUrl**: String (VARCHAR) | Nullable | Image URL.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `propertyNumber`: String (VARCHAR) | UQ.
+- `catalogItemId`: String (VARCHAR) | FK -> `CatalogItem.id` | Required.
+- `description`: String (VARCHAR) | Required.
+- `unitValue`: Decimal (DECIMAL(14,2)) | Required.
+- `quantity`: Int (INT) | Required.
+- `dateAcquired`: DateTime (DATETIME) | Required.
+- `fundClusterId`: String (VARCHAR) | FK -> `FundCluster.id` | Required.
+- `departmentId`: String (VARCHAR) | FK -> `Department.id` | Nullable.
+- `custodianId`: String (VARCHAR) | FK -> `Employee.id` | Required.
+- `locationId`: String (VARCHAR) | FK -> `Location.id` | Nullable.
+- `remarks`: String (VARCHAR) | Nullable.
+- `status`: Enum `AssetStatus` | Required (`Active`, `UnderRepair`, `Missing`, `Retired`).
+- `imageUrl`: String (VARCHAR) | Nullable.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### Transaction
-- **id**: String (VARCHAR) | PK | Transaction identifier.
-- **transactionId**: String (VARCHAR) | UQ | Transaction number.
-- **date**: DateTime (DATETIME) | Required | Transaction date.
-- **type**: TransactionType (ENUM) | Required | StockIn/StockOut.
-- **departmentId**: String (VARCHAR) | FK -> Department.id | Nullable | Department reference.
-- **supplier**: String (VARCHAR) | Nullable | Supplier/manufacturer.
-- **referenceNo**: String (VARCHAR) | Nullable | Reference number.
-- **locationId**: String (VARCHAR) | FK -> Location.id | Nullable | Location reference.
-- **status**: TransactionStatus (ENUM) | Required | Status.
-- **remarks**: String (VARCHAR) | Nullable | Notes.
-- **createdBy**: String (VARCHAR) | Required | Creator label.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `transactionId`: String (VARCHAR) | UQ.
+- `date`: DateTime (DATETIME) | Required.
+- `type`: Enum `TransactionType` | Required (`StockIn`, `StockOut`).
+- `departmentId`: String (VARCHAR) | FK -> `Department.id` | Nullable.
+- `supplier`: String (VARCHAR) | Nullable.
+- `referenceNo`: String (VARCHAR) | Nullable.
+- `locationId`: String (VARCHAR) | FK -> `Location.id` | Nullable.
+- `status`: Enum `TransactionStatus` | Required.
+- `remarks`: String (VARCHAR) | Nullable.
+- `createdBy`: String (VARCHAR) | Required.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### TransactionItem
-- **id**: String (VARCHAR) | PK | Transaction item identifier.
-- **transactionId**: String (VARCHAR) | FK -> Transaction.id | Required | Transaction reference.
-- **catalogItemId**: String (VARCHAR) | FK -> CatalogItem.id | Required | Catalog reference.
-- **quantity**: Int (INT) | Required | Quantity.
-- **remarks**: String (VARCHAR) | Nullable | Notes.
-- **custodianId**: String (VARCHAR) | FK -> Employee.id | Nullable | Custodian reference.
+- `id`: String (VARCHAR) | PK.
+- `transactionId`: String (VARCHAR) | FK -> `Transaction.id` | Required.
+- `catalogItemId`: String (VARCHAR) | FK -> `CatalogItem.id` | Required.
+- `quantity`: Int (INT) | Required.
+- `remarks`: String (VARCHAR) | Nullable.
+- `custodianId`: String (VARCHAR) | FK -> `Employee.id` | Nullable.
 
 ### MemorandumReceipt
-- **id**: String (VARCHAR) | PK | MR identifier.
-- **mrNumber**: String (VARCHAR) | UQ | MR number.
-- **dateIssued**: DateTime (DATETIME) | Required | Issue date.
-- **employeeId**: String (VARCHAR) | FK -> Employee.id | Required | Employee reference.
-- **departmentId**: String (VARCHAR) | FK -> Department.id | Required | Department reference.
-- **status**: MRStatus (ENUM) | Required | Status.
-- **remarks**: String (VARCHAR) | Nullable | Notes.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: String (VARCHAR) | PK.
+- `mrNumber`: String (VARCHAR) | UQ.
+- `dateIssued`: DateTime (DATETIME) | Required.
+- `employeeId`: String (VARCHAR) | FK -> `Employee.id` | Required.
+- `departmentId`: String (VARCHAR) | FK -> `Department.id` | Required.
+- `status`: Enum `MRStatus` | Required (`Active`, `Closed`).
+- `remarks`: String (VARCHAR) | Nullable.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ### MRItem
-- **id**: String (VARCHAR) | PK | MR item identifier.
-- **mrId**: String (VARCHAR) | FK -> MemorandumReceipt.id | Required | MR reference.
-- **assetId**: String (VARCHAR) | FK -> Asset.id | Required | Asset reference.
-- **propertyNumber**: String (VARCHAR) | Required | Property number (snapshot).
-- **description**: String (VARCHAR) | Required | Description (snapshot).
-- **unitValue**: Decimal (DECIMAL) | Required | Unit value (snapshot).
-- **returnDate**: DateTime (DATETIME) | Nullable | Return date.
-- **remarks**: String (VARCHAR) | Nullable | Notes.
+- `id`: String (VARCHAR) | PK.
+- `mrId`: String (VARCHAR) | FK -> `MemorandumReceipt.id` | Required.
+- `assetId`: String (VARCHAR) | FK -> `Asset.id` | Required.
+- `propertyNumber`: String (VARCHAR) | Required (snapshot).
+- `description`: String (VARCHAR) | Required (snapshot).
+- `unitValue`: Decimal (DECIMAL(14,2)) | Required (snapshot).
+- `returnDate`: DateTime (DATETIME) | Nullable.
+- `remarks`: String (VARCHAR) | Nullable.
 
 ### AuditSession
-- **id**: String (VARCHAR) | PK | Audit session identifier.
-- **sessionId**: String (VARCHAR) | UQ | Session number.
-- **date**: DateTime (DATETIME) | Required | Audit date.
-- **departmentId**: String (VARCHAR) | FK -> Department.id | Nullable | Department scope.
-- **locationId**: String (VARCHAR) | FK -> Location.id | Nullable | Location scope.
-- **description**: String (VARCHAR) | Required | Description.
-- **status**: AuditSessionStatus (ENUM) | Required | Status.
-- **createdBy**: String (VARCHAR) | Required | Creator label.
-- **createdAt**: DateTime (DATETIME) | Auto | Created timestamp.
-- **finalizedAt**: DateTime (DATETIME) | Nullable | Finalized timestamp.
+- `id`: String (VARCHAR) | PK.
+- `sessionId`: String (VARCHAR) | UQ.
+- `date`: DateTime (DATETIME) | Required.
+- `departmentId`: String (VARCHAR) | FK -> `Department.id` | Nullable.
+- `locationId`: String (VARCHAR) | FK -> `Location.id` | Nullable.
+- `description`: String (VARCHAR) | Required.
+- `status`: Enum `AuditSessionStatus` | Required.
+- `createdBy`: String (VARCHAR) | Required.
+- `createdAt`: DateTime (DATETIME) | Auto.
+- `finalizedAt`: DateTime (DATETIME) | Nullable.
 
 ### AuditItem
-- **id**: String (VARCHAR) | PK | Audit item identifier.
-- **auditId**: String (VARCHAR) | FK -> AuditSession.id | Required | Audit session reference.
-- **assetId**: String (VARCHAR) | FK -> Asset.id | Required | Asset reference.
-- **propertyNumber**: String (VARCHAR) | Required | Property number (snapshot).
-- **description**: String (VARCHAR) | Required | Description (snapshot).
-- **unitValue**: Decimal (DECIMAL) | Required | Unit value (snapshot).
-- **systemQty**: Int (INT) | Required | System quantity.
-- **actualQty**: Int (INT) | Nullable | Actual quantity.
-- **shortageOverageQty**: Int (INT) | Required | Variance quantity.
-- **shortageOverageValue**: Decimal (DECIMAL) | Required | Variance value.
-- **status**: AuditItemStatus (ENUM) | Required | Status.
-- **remarks**: String (VARCHAR) | Nullable | Notes.
-- **locationName**: String (VARCHAR) | Required | Location name (snapshot).
-- **custodianName**: String (VARCHAR) | Required | Custodian name (snapshot).
+- `id`: String (VARCHAR) | PK.
+- `auditId`: String (VARCHAR) | FK -> `AuditSession.id` | Required.
+- `assetId`: String (VARCHAR) | FK -> `Asset.id` | Required.
+- `propertyNumber`: String (VARCHAR) | Required (snapshot).
+- `description`: String (VARCHAR) | Required (snapshot).
+- `unitValue`: Decimal (DECIMAL(14,2)) | Required.
+- `systemQty`: Int (INT) | Required.
+- `actualQty`: Int (INT) | Nullable.
+- `shortageOverageQty`: Int (INT) | Required.
+- `shortageOverageValue`: Decimal (DECIMAL(14,2)) | Default `0`.
+- `status`: Enum `AuditItemStatus` | Required.
+- `remarks`: String (VARCHAR) | Nullable.
+- `locationName`: String (VARCHAR) | Required (snapshot).
+- `custodianName`: String (VARCHAR) | Required (snapshot).
 
 ### ActivityLog
-- **id**: String (VARCHAR) | PK | Log entry identifier.
-- **timestamp**: DateTime (DATETIME) | Auto | Log timestamp.
-- **userId**: String (VARCHAR) | FK -> User.id | Required | User reference.
-- **username**: String (VARCHAR) | Required | Username snapshot.
-- **role**: String (VARCHAR) | Required | Role snapshot.
-- **action**: String (VARCHAR) | Required | Action label.
-- **module**: String (VARCHAR) | Required | Module name.
-- **referenceId**: String (VARCHAR) | Required | Related record id.
-- **description**: String (VARCHAR) | Required | Description.
+- `id`: String (VARCHAR) | PK.
+- `timestamp`: DateTime (DATETIME) | Auto.
+- `userId`: String (VARCHAR) | FK -> `User.id` | Required in payload; Prisma relation optional.
+- `username`: String (VARCHAR) | Required (snapshot).
+- `role`: String (VARCHAR) | Required (snapshot).
+- `action`: String (VARCHAR) | Required.
+- `module`: String (VARCHAR) | Required.
+- `referenceId`: String (VARCHAR) | Required.
+- `description`: String (VARCHAR) | Required.
 
 ### SystemSettings
-- **id**: Int (INT) | PK | Singleton row (id = 1).
-- **general**: Json (JSON) | Required | General settings.
-- **inventory**: Json (JSON) | Required | Inventory rules.
-- **documents**: Json (JSON) | Required | Document defaults.
-- **notifications**: Json (JSON) | Required | Notification settings.
-- **integrations**: Json (JSON) | Nullable | Integration metadata (e.g., last sync timestamps).
-- **updatedAt**: DateTime (DATETIME) | Auto | Updated timestamp.
+- `id`: Int (INT) | PK | Singleton (`id=1`).
+- `general`: Json (JSON) | Required.
+- `inventory`: Json (JSON) | Required.
+- `documents`: Json (JSON) | Required.
+- `notifications`: Json (JSON) | Required.
+- `integrations`: Json (JSON) | Nullable.
+- `updatedAt`: DateTime (DATETIME) | Auto.
 
 ## Enumerations
-- **Status**: Active, Inactive
-- **ItemType**: PPE, Consumable
-- **CategoryType**: PPE, Consumable, SemiExpendable
-- **AssetStatus**: Active, Retired, UnderRepair, Missing
-- **TransactionType**: StockIn, StockOut
-- **TransactionStatus**: Pending, Completed, Cancelled
-- **AuditSessionStatus**: Draft, Finalized
-- **AuditItemStatus**: Matched, Shortage, Overage, Uncounted
-- **MRStatus**: Active, Closed
+- `Status`: `Active`, `Inactive`
+- `ItemType`: `PPE`, `Consumable`
+- `CategoryType`: `PPE`, `Consumable`, `SemiExpendable`
+- `AssetStatus`: `Active`, `Retired`, `UnderRepair`, `Missing`
+- `TransactionType`: `StockIn`, `StockOut`
+- `TransactionStatus`: `Pending`, `Completed`, `Cancelled`
+- `AuditSessionStatus`: `Draft`, `Finalized`
+- `AuditItemStatus`: `Matched`, `Shortage`, `Overage`, `Uncounted`
+- `MRStatus`: `Active`, `Closed`
 
-## External HRMS/SSO Payloads (Reference)
+## External HRMS/SSO Payloads
 
-### HRMS Userinfo (OAuth /userinfo)
-- **sub**: String | Subject identifier.
-- **name**: String | Full name.
-- **email**: String | Email address.
-- **employee_id**: String | HRMS employee id.
-- **employee_number**: String | HRMS employee number.
-- **first_name**: String | First name.
-- **last_name**: String | Last name.
-- **middle_name**: String | Middle name.
-- **department**: String | Department name.
-- **position**: String | Position/job title.
-- **roles**: String[] | HRMS roles.
-- **permissions**: String[] | HRMS permissions.
+### OAuth Userinfo (`/oauth/userinfo`)
+- Common fields: `sub`, `email`, `name`, `client_role`, `employee_id`, `employee_number`, `unit`, `position`, `roles[]`, `permissions[]`.
+- Login mapping: `client_role=admin` -> local role `Officer`; other values -> `Staff`.
 
-### HRMS Employee (HRMS API)
-- **employee_id**: String | Employee id (unique in HRMS).
-- **employee_number**: String | Employee number.
-- **first_name**: String | First name.
-- **middle_name**: String | Middle name.
-- **last_name**: String | Last name.
-- **department**: String | Department name.
-- **position**: String | Position/job title.
-- **status**: String | Employment status.
-- **is_deleted**: Boolean | Soft-delete flag.
-- **deleted_at**: DateTime | Deleted timestamp.
+### HRMS Units (`/api/units`)
+- Common fields: `id`, `code`, `name`, `unit_type`, `parent_unit_id`, `status`, `is_deleted`, `deleted_at`.
+- Sync rule: only `college` and `office` types are imported as local units.
 
-### HRMS Department (HRMS API)
-- **code**: String | Department code (optional).
-- **name**: String | Department name.
-- **description**: String | Description (optional).
-- **status**: String | Status.
-- **is_deleted**: Boolean | Soft-delete flag.
-- **deleted_at**: DateTime | Deleted timestamp.
+### HRMS Employees (`/api/employees`)
+- Common fields: `employee_id`, `employee_number`, `name.*`, `position.*`, `unit`, `employment.status`, `is_deleted`, `deleted_at`.
+- Sync rule: employees from program units are mapped to parent college/office unit.
 
-### OAuth Token (HRMS)
-- **access_token**: String | Bearer token used for API calls.
-- **expires_in**: Int | Token lifetime (seconds).
-- **refresh_token**: String | Optional refresh token (provider-specific).
+### OAuth Token (`/oauth/token`)
+- Fields: `access_token`, `expires_in`, `refresh_token?`.
+- Usage: held in server memory per SSO user for HRMS sync calls and SSO logout flow.
+
+## Derived and Behavioral Notes
+- Unit and Employee master data are read-only in this app and updated via HRMS sync endpoints.
+- SSO logout builds `post_logout_redirect_uri` to frontend with `sso_logged_out=1`.
+- MR lifecycle actions are encoded in `MRItem.remarks` and `MRItem.returnDate`:
+- Return: `Good`, `For Repair`, `Unserviceable`.
+- Transfer: `Transferred`.
+- Missing: `Missing`.
+- Reports Center computes derived fields such as Availability, Condition, MR Status, Last MR Action, MR activity counts, and custody summaries from `Asset`, `MemorandumReceipt`, and `MRItem` records.
